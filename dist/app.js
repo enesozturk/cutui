@@ -271,33 +271,6 @@
     return Math.sqrt(r * r + g * g + b * b);
   }
 
-  function minimumAlphaAndForeground(data, index, background) {
-    const current = [data[index], data[index + 1], data[index + 2]];
-    const vector = current.map((channel, i) => channel - background[i]);
-    if (Math.max(...vector.map(Math.abs)) < 1.4) {
-      return { alpha: 0, color: current };
-    }
-
-    let rayLength = Infinity;
-    for (let channel = 0; channel < 3; channel += 1) {
-      const delta = vector[channel];
-      if (Math.abs(delta) < 0.0001) continue;
-      const limit = delta > 0
-        ? (255 - background[channel]) / delta
-        : (0 - background[channel]) / delta;
-      if (limit > 0) rayLength = Math.min(rayLength, limit);
-    }
-
-    if (!Number.isFinite(rayLength) || rayLength <= 0) {
-      return { alpha: 1, color: current };
-    }
-
-    const alpha = clamp(1 / rayLength, 0, 1);
-    if (alpha < 0.003) return { alpha: 0, color: current };
-    const color = current.map((channel, i) => clamp(Math.round(background[i] + vector[i] / alpha), 0, 255));
-    return { alpha, color };
-  }
-
   function buildMask(imageData, strength, preserveSoftEdges) {
     const { width, height, data } = imageData;
     const corners = estimateCorners(imageData);
@@ -341,30 +314,30 @@
       if (y < height - 1) visit(pixelIndex + width);
     }
 
+    // Only pixels reached from the crop's outer border may become transparent.
+    // All enclosed UI pixels keep their original RGB values byte-for-byte.
+    // This avoids the bright/dark speckling that color decontamination creates
+    // around antialiased type and fine icons.
+    const noiseFloor = Math.max(2.5, strength * 0.12);
     for (let pixelIndex = 0; pixelIndex < status.length; pixelIndex += 1) {
       if (status[pixelIndex] !== 2) continue;
-      const x = pixelIndex % width;
-      const y = Math.floor(pixelIndex / width);
       const dataIndex = pixelIndex * 4;
-      const background = backgroundAt(corners, x, y, width, height);
-
       if (!preserveSoftEdges) {
         data[dataIndex + 3] = 0;
         continue;
       }
-
+      const x = pixelIndex % width;
+      const y = Math.floor(pixelIndex / width);
+      const background = backgroundAt(corners, x, y, width, height);
       const distance = colorDistance(data, dataIndex, background);
-      const noiseFloor = Math.max(2.5, strength * 0.16);
       if (distance <= noiseFloor) {
         data[dataIndex + 3] = 0;
         continue;
       }
 
-      const matte = minimumAlphaAndForeground(data, dataIndex, background);
-      data[dataIndex] = matte.color[0];
-      data[dataIndex + 1] = matte.color[1];
-      data[dataIndex + 2] = matte.color[2];
-      data[dataIndex + 3] = Math.round(matte.alpha * 255);
+      const position = clamp((distance - noiseFloor) / Math.max(1, strength - noiseFloor), 0, 1);
+      const smoothAlpha = position * position * (3 - 2 * position);
+      data[dataIndex + 3] = Math.round(smoothAlpha * 255);
     }
 
     return imageData;
@@ -400,7 +373,9 @@
     const output = document.createElement("canvas");
     output.width = cropWidth + padding * 2;
     output.height = cropHeight + padding * 2;
-    output.getContext("2d").drawImage(
+    const outputContext = output.getContext("2d");
+    outputContext.imageSmoothingEnabled = false;
+    outputContext.drawImage(
       tempCanvas,
       minX,
       minY,
@@ -438,6 +413,7 @@
       cropCanvas.width = width;
       cropCanvas.height = height;
       const cropContext = cropCanvas.getContext("2d", { willReadFrequently: true });
+      cropContext.imageSmoothingEnabled = false;
       cropContext.drawImage(sourceImage, x, y, width, height, 0, 0, width, height);
       const pixels = cropContext.getImageData(0, 0, width, height);
       const masked = buildMask(pixels, Number(elements.strength.value), elements.keepShadow.checked);
@@ -451,6 +427,7 @@
 
       elements.resultCanvas.width = output.width;
       elements.resultCanvas.height = output.height;
+      resultContext.imageSmoothingEnabled = false;
       resultContext.clearRect(0, 0, output.width, output.height);
       resultContext.drawImage(output, 0, 0);
       elements.resultCanvas.style.display = "block";

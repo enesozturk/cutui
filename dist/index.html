@@ -9,7 +9,7 @@
     />
     <title>CutUI — UI asset extractor</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=2" />
   </head>
   <body>
     <header class="site-header">
@@ -114,16 +114,16 @@
             <label class="control-group" for="strength-control">
               <span class="control-label">
                 <span>Removal strength</span>
-                <output id="strength-value">34</output>
+                <output id="strength-value">24</output>
               </span>
-              <input id="strength-control" type="range" min="8" max="120" value="34" />
+              <input id="strength-control" type="range" min="8" max="120" value="24" />
               <span class="range-labels"><span>Precise</span><span>Aggressive</span></span>
             </label>
 
             <label class="switch-row" for="shadow-control">
               <span>
                 <strong>Keep soft shadows</strong>
-                <small>Rebuild translucent edge pixels</small>
+                <small>Keep a smooth alpha at outer edges</small>
               </span>
               <span class="switch">
                 <input id="shadow-control" type="checkbox" checked />
@@ -157,6 +157,6 @@
       <div id="status" class="toast" role="status" aria-live="polite" hidden></div>
     </main>
 
-    <script src="./app.js" defer></script>
+    <script src="./app.js?v=2" defer></script>
   </body>
 </html>

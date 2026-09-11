@@ -16,7 +16,7 @@ Then open <http://localhost:4173>.
 2. Drag a rectangle around one component, leaving a little surrounding background.
 3. CutUI estimates a simple bilinear background from the selection corners.
 4. A border-connected flood fill removes only matching outside pixels.
-5. Edge colors are converted to alpha to preserve rounded corners and soft shadows.
+5. Only border-connected background pixels receive a smooth alpha; interior text, icons, and fills keep their original RGB values byte-for-byte.
 
 Everything runs with Canvas APIs in the browser. There is no backend, model inference, upload, or API cost.
 
