@@ -930,6 +930,34 @@
     context.putImageData(result, 0, 0);
   }
 
+  function restoreDetectedContainersInComposite(canvas, originalCanvas, elementsToRestore) {
+    if (!originalCanvas) return;
+    const context = canvas.getContext("2d");
+    elementsToRestore
+      .filter((element) => element.kind === "container")
+      .forEach((element) => {
+        const restored = document.createElement("canvas");
+        restored.width = element.width;
+        restored.height = element.height;
+        const restoredContext = restored.getContext("2d");
+        restoredContext.imageSmoothingEnabled = false;
+        restoredContext.drawImage(
+          canvas,
+          element.x,
+          element.y,
+          element.width,
+          element.height,
+          0,
+          0,
+          element.width,
+          element.height,
+        );
+        restoreClosedContainerInterior(restored, originalCanvas, element);
+        context.clearRect(element.x, element.y, element.width, element.height);
+        context.drawImage(restored, element.x, element.y);
+      });
+  }
+
   async function downloadElementsZip() {
     if (!latestBlob || detectedElements.length === 0) return;
     const originalLabel = elements.downloadZipButton.textContent;
@@ -1047,13 +1075,21 @@
       elements.emptyResult.hidden = true;
       elements.resultSize.textContent = `${output.width} × ${output.height} px`;
 
-      latestBlob = await new Promise((resolve) => elements.resultCanvas.toBlob(resolve, "image/png"));
       detectedElements = detectUiElements(
         elements.resultCanvas,
         latestOriginalCanvas,
         backgroundColor,
         Number(elements.strength.value),
       );
+      // Container recovery used to run only while building the ZIP. Apply it
+      // to the combined canvas too, so the single PNG keeps pale banners and
+      // inputs as complete pixel-faithful surfaces.
+      restoreDetectedContainersInComposite(
+        elements.resultCanvas,
+        latestOriginalCanvas,
+        detectedElements,
+      );
+      latestBlob = await new Promise((resolve) => elements.resultCanvas.toBlob(resolve, "image/png"));
       elements.downloadButton.disabled = !latestBlob;
       elements.downloadZipButton.disabled = !latestBlob || detectedElements.length === 0;
       elements.downloadZipButton.textContent = detectedElements.length > 0

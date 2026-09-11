@@ -25,7 +25,7 @@ Everything runs with Canvas APIs in the browser. There is no backend, model infe
 - **Single PNG:** the complete selected composition as one transparent image.
 - **ZIP:** detected connected UI surfaces and grouped text/icon lines as separate transparent PNG files.
 
-Low-contrast, wide containers such as white banners and pill inputs are recovered from their original border geometry so their fill remains intact in the ZIP export.
+Low-contrast, wide containers such as white banners and pill inputs are recovered from their original border geometry so their fill remains intact in both the single PNG and ZIP exports.
 
 ## POC limits
 
