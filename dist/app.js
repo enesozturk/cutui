@@ -5,6 +5,9 @@
   const MAX_IMAGE_PIXELS = 8_000_000;
   const MAX_SELECTION_PIXELS = MAX_IMAGE_PIXELS;
   const MIN_SELECTION = 12;
+  const AUTO_REMOVAL_STRENGTH = 12;
+  const AUTO_REMOVE_SHADOWS = true;
+  const ELEMENT_ANALYSIS_PIXELS = 1_100_000;
 
   const elements = {
     uploadView: document.querySelector("#upload-view"),
@@ -12,7 +15,6 @@
     dropZone: document.querySelector("#drop-zone"),
     fileInput: document.querySelector("#file-input"),
     chooseButton: document.querySelector("#choose-button"),
-    sampleButton: document.querySelector("#sample-button"),
     newImageButton: document.querySelector("#new-image-button"),
     resetSelectionButton: document.querySelector("#reset-selection-button"),
     sourceCanvas: document.querySelector("#source-canvas"),
@@ -20,19 +22,8 @@
     resultCanvas: document.querySelector("#result-canvas"),
     emptyResult: document.querySelector("#empty-result"),
     resultSize: document.querySelector("#result-size"),
-    pickBackgroundButton: document.querySelector("#pick-background-button"),
-    autoBackgroundButton: document.querySelector("#auto-background-button"),
-    backgroundSwatch: document.querySelector("#background-swatch"),
-    backgroundValue: document.querySelector("#background-value"),
-    strength: document.querySelector("#strength-control"),
-    strengthValue: document.querySelector("#strength-value"),
-    removeShadows: document.querySelector("#shadow-control"),
-    padding: document.querySelector("#padding-control"),
-    paddingValue: document.querySelector("#padding-value"),
-    extractButton: document.querySelector("#extract-button"),
     downloadButton: document.querySelector("#download-button"),
     downloadZipButton: document.querySelector("#download-zip-button"),
-    copyButton: document.querySelector("#copy-button"),
     status: document.querySelector("#status"),
   };
 
@@ -44,10 +35,9 @@
   let selection = null;
   let dragStart = null;
   let latestBlob = null;
+  let extracting = false;
   let toastTimer = null;
   let loadVersion = 0;
-  let manualBackground = null;
-  let pickingBackground = false;
   let detectedElements = [];
   let latestOriginalCanvas = null;
 
@@ -105,9 +95,6 @@
         return;
       }
       sourceImage = image;
-      manualBackground = null;
-      pickingBackground = false;
-      renderBackgroundControl();
       elements.sourceCanvas.width = image.naturalWidth;
       elements.sourceCanvas.height = image.naturalHeight;
 
@@ -118,13 +105,14 @@
         height: image.naturalHeight,
       };
 
-      clearResult();
-      drawSource();
       elements.uploadView.hidden = true;
       elements.editorView.hidden = false;
+      clearResult();
+      drawSource();
       elements.editorView.scrollIntoView({ behavior: "smooth", block: "start" });
       elements.sourceCanvas.focus({ preventScroll: true });
-      showStatus("Image ready — the full screenshot is selected.");
+      showStatus("Screenshot loaded. Extracting UI assets…");
+      window.setTimeout(() => extractAsset(), 0);
       if (onComplete) onComplete();
     };
     image.onerror = () => {
@@ -231,6 +219,7 @@
     };
     clearResult();
     drawSource();
+    window.setTimeout(() => extractAsset(), 0);
   }
 
   function clearResult() {
@@ -243,7 +232,6 @@
     elements.downloadButton.disabled = true;
     elements.downloadZipButton.disabled = true;
     elements.downloadZipButton.textContent = "Download ZIP";
-    elements.copyButton.disabled = true;
     detectedElements = [];
     latestOriginalCanvas = null;
   }
@@ -566,22 +554,28 @@
     return containers;
   }
 
-  function detectUiElements(canvas, originalCanvas = null, backgroundColor = null, strength = 24) {
-    const context = canvas.getContext("2d", { willReadFrequently: true });
+  function detectUiElements(canvas, originalCanvas = null, backgroundColor = null, strength = AUTO_REMOVAL_STRENGTH) {
     const { width, height } = canvas;
-    const pixels = context.getImageData(0, 0, width, height).data;
-    const visited = new Uint8Array(width * height);
-    const queue = new Int32Array(width * height);
+    const analysisScale = Math.min(1, Math.sqrt(ELEMENT_ANALYSIS_PIXELS / (width * height)));
+    const analysisWidth = Math.max(1, Math.round(width * analysisScale));
+    const analysisHeight = Math.max(1, Math.round(height * analysisScale));
+    const analysisCanvas = document.createElement("canvas");
+    analysisCanvas.width = analysisWidth;
+    analysisCanvas.height = analysisHeight;
+    const analysisContext = analysisCanvas.getContext("2d", { willReadFrequently: true });
+    analysisContext.imageSmoothingEnabled = false;
+    analysisContext.drawImage(canvas, 0, 0, analysisWidth, analysisHeight);
+    const pixels = analysisContext.getImageData(0, 0, analysisWidth, analysisHeight).data;
+    const visited = new Uint8Array(analysisWidth * analysisHeight);
+    const queue = new Int32Array(analysisWidth * analysisHeight);
     const components = [];
-    const alphaThreshold = 10;
 
     for (let start = 0; start < visited.length; start += 1) {
-      if (visited[start] || pixels[start * 4 + 3] <= alphaThreshold) continue;
-
+      if (visited[start] || pixels[start * 4 + 3] <= 16) continue;
       let queueStart = 0;
       let queueEnd = 0;
-      let minX = width;
-      let minY = height;
+      let minX = analysisWidth;
+      let minY = analysisHeight;
       let maxX = -1;
       let maxY = -1;
       let pixelCount = 0;
@@ -590,51 +584,42 @@
 
       while (queueStart < queueEnd) {
         const pixelIndex = queue[queueStart++];
-        const x = pixelIndex % width;
-        const y = Math.floor(pixelIndex / width);
+        const x = pixelIndex % analysisWidth;
+        const y = Math.floor(pixelIndex / analysisWidth);
         minX = Math.min(minX, x);
         minY = Math.min(minY, y);
         maxX = Math.max(maxX, x);
         maxY = Math.max(maxY, y);
         pixelCount += 1;
-
         for (let dy = -1; dy <= 1; dy += 1) {
           for (let dx = -1; dx <= 1; dx += 1) {
             if (dx === 0 && dy === 0) continue;
             const nextX = x + dx;
             const nextY = y + dy;
-            if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) continue;
-            const next = nextY * width + nextX;
-            if (visited[next] || pixels[next * 4 + 3] <= alphaThreshold) continue;
+            if (nextX < 0 || nextX >= analysisWidth || nextY < 0 || nextY >= analysisHeight) continue;
+            const next = nextY * analysisWidth + nextX;
+            if (visited[next] || pixels[next * 4 + 3] <= 16) continue;
             visited[next] = 1;
             queue[queueEnd++] = next;
           }
         }
       }
-
       if (pixelCount < 3) continue;
-      components.push({
-        x: minX,
-        y: minY,
-        width: maxX - minX + 1,
-        height: maxY - minY + 1,
-        pixelCount,
-      });
+      components.push({ x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1, pixelCount });
     }
 
-    const totalArea = width * height;
+    const totalArea = analysisWidth * analysisHeight;
     const large = [];
     const small = [];
     components.forEach((component) => {
       const boxArea = component.width * component.height;
-      const isSurface = boxArea > totalArea * 0.0015
-        || (component.width > width * 0.12 && component.height > height * 0.055);
+      const fillRatio = component.pixelCount / Math.max(1, boxArea);
+      const isSurface = boxArea > totalArea * 0.0012
+        && (fillRatio > 0.08 || component.width > analysisWidth * 0.16);
       (isSurface ? large : small).push(component);
     });
 
-    // Merge glyphs and small icons that sit on the same visual line. Large
-    // connected surfaces remain separate, so adjacent cards never collapse
-    // into one ZIP entry.
+    // Keep standalone labels useful without turning each glyph into a file.
     const parents = small.map((_, index) => index);
     const find = (index) => {
       let current = index;
@@ -649,38 +634,24 @@
       const rootB = find(b);
       if (rootA !== rootB) parents[rootB] = rootA;
     };
-
     for (let a = 0; a < small.length; a += 1) {
       const first = small[a];
-      const firstRight = first.x + first.width;
-      const firstBottom = first.y + first.height;
       for (let b = a + 1; b < small.length; b += 1) {
         const second = small[b];
-        const secondRight = second.x + second.width;
-        const secondBottom = second.y + second.height;
-        const overlapY = Math.max(0, Math.min(firstBottom, secondBottom) - Math.max(first.y, second.y));
-        const overlapRatio = overlapY / Math.max(1, Math.min(first.height, second.height));
-        const centerDifference = Math.abs(
-          (first.y + first.height / 2) - (second.y + second.height / 2),
-        );
-        const sameLine = overlapRatio >= 0.42
-          || centerDifference <= Math.max(first.height, second.height) * 0.34;
+        const overlapY = Math.max(0, Math.min(first.y + first.height, second.y + second.height) - Math.max(first.y, second.y));
+        const sameLine = overlapY / Math.max(1, Math.min(first.height, second.height)) >= 0.38
+          || Math.abs((first.y + first.height / 2) - (second.y + second.height / 2)) <= Math.max(first.height, second.height) * 0.3;
         if (!sameLine) continue;
-
-        const horizontalGap = Math.max(0, Math.max(first.x, second.x) - Math.min(firstRight, secondRight));
-        const allowedGap = Math.max(12, Math.min(42, Math.max(first.height, second.height) * 0.95));
-        if (horizontalGap <= allowedGap) unite(a, b);
+        const horizontalGap = Math.max(0, Math.max(first.x, second.x) - Math.min(first.x + first.width, second.x + second.width));
+        if (horizontalGap <= Math.max(10, Math.min(56, Math.max(first.height, second.height) * 2.2))) unite(a, b);
       }
     }
 
-    const textGroups = new Map();
+    const groups = new Map();
     small.forEach((component, index) => {
       const root = find(index);
-      const existing = textGroups.get(root);
-      if (!existing) {
-        textGroups.set(root, { ...component });
-        return;
-      }
+      const existing = groups.get(root);
+      if (!existing) return groups.set(root, { ...component });
       const right = Math.max(existing.x + existing.width, component.x + component.width);
       const bottom = Math.max(existing.y + existing.height, component.y + component.height);
       existing.x = Math.min(existing.x, component.x);
@@ -690,16 +661,32 @@
       existing.pixelCount += component.pixelCount;
     });
 
-    const result = [...large, ...textGroups.values()]
-      .filter((component) => component.width >= 2 && component.height >= 2)
-      .map((component) => {
-        const padding = clamp(Math.round(Math.min(component.width, component.height) * 0.08), 4, 12);
-        const x = Math.max(0, component.x - padding);
-        const y = Math.max(0, component.y - padding);
-        const right = Math.min(width, component.x + component.width + padding);
-        const bottom = Math.min(height, component.y + component.height + padding);
-        return { x, y, width: right - x, height: bottom - y, kind: "masked" };
-      });
+    const toFullSize = (component) => {
+      const rawX = Math.floor(component.x / analysisScale);
+      const rawY = Math.floor(component.y / analysisScale);
+      const rawRight = Math.ceil((component.x + component.width) / analysisScale);
+      const rawBottom = Math.ceil((component.y + component.height) / analysisScale);
+      const pad = clamp(Math.round(Math.min(rawRight - rawX, rawBottom - rawY) * 0.06), 3, 10);
+      const x = Math.max(0, rawX - pad);
+      const y = Math.max(0, rawY - pad);
+      const right = Math.min(width, rawRight + pad);
+      const bottom = Math.min(height, rawBottom + pad);
+      return { x, y, width: right - x, height: bottom - y, kind: "masked" };
+    };
+
+    const result = [...large, ...groups.values()]
+      .filter((component) => {
+        const fullWidth = component.width / analysisScale;
+        const fullHeight = component.height / analysisScale;
+        const fillRatio = component.pixelCount / Math.max(1, component.width * component.height);
+        const likelySeparator = fullHeight < 30 && fullWidth / Math.max(1, fullHeight) > 20;
+        return fullWidth >= 20
+          && fullHeight >= 6
+          && component.pixelCount >= 4
+          && fillRatio >= 0.018
+          && !likelySeparator;
+      })
+      .map(toFullSize);
 
     const recoveredContainers = detectLowContrastContainers(originalCanvas, backgroundColor, strength);
     const outsideContainers = result.filter((element) => !recoveredContainers.some((container) => {
@@ -719,12 +706,21 @@
     result.length = 0;
     result.push(...recoveredContainers, ...outsideContainers);
 
-    result.sort((a, b) => {
+    // A crop touching the selection edge is unknowably incomplete. Keep it in
+    // the combined PNG, but do not advertise a visibly sliced asset in ZIP.
+    const completeElements = result.filter((element) => element.x > 1
+      && element.y > 1
+      && !(element.y > height * 0.9 && element.y + element.height > height * 0.97)
+      && element.x + element.width < width - 1
+      && element.y + element.height < height - 1);
+    const exportElements = completeElements.length > 0 ? completeElements : result;
+
+    exportElements.sort((a, b) => {
       const rowTolerance = Math.max(12, Math.min(a.height, b.height) * 0.35);
       if (Math.abs(a.y - b.y) > rowTolerance) return a.y - b.y;
       return a.x - b.x;
     });
-    return result.slice(0, 100);
+    return exportElements.slice(0, 80);
   }
 
   function crc32(bytes) {
@@ -1011,13 +1007,13 @@
   }
 
   async function extractAsset() {
+    if (extracting) return null;
     if (!sourceImage || !selection || selection.width < MIN_SELECTION || selection.height < MIN_SELECTION) {
       showStatus("Drag a larger selection around the component first.");
       return null;
     }
 
-    elements.extractButton.disabled = true;
-    elements.extractButton.textContent = "Extracting…";
+    extracting = true;
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
     try {
@@ -1037,21 +1033,21 @@
       cropContext.imageSmoothingEnabled = false;
       cropContext.drawImage(sourceImage, x, y, width, height, 0, 0, width, height);
       const pixels = cropContext.getImageData(0, 0, width, height);
-      const backgroundColor = manualBackground || estimateDominantBorder(pixels);
+      const backgroundColor = estimateDominantBorder(pixels);
       const masked = buildMask(
         pixels,
-        Number(elements.strength.value),
-        elements.removeShadows.checked,
+        AUTO_REMOVAL_STRENGTH,
+        AUTO_REMOVE_SHADOWS,
         backgroundColor,
       );
       // Preserve the exact selection frame. Tight alpha-bound trimming can
       // silently discard UI touching the left/right edges and changes the
       // relative positioning expected from a combined screenshot export.
-      const framed = frameAndPad(masked, Number(elements.padding.value));
+      const framed = frameAndPad(masked, 0);
 
       if (!framed) {
         clearResult();
-        showStatus("No foreground found. Lower the removal strength and try again.");
+        showStatus("No UI elements were found in this selection.");
         return null;
       }
 
@@ -1086,7 +1082,7 @@
         elements.resultCanvas,
         latestOriginalCanvas,
         backgroundColor,
-        Number(elements.strength.value),
+        AUTO_REMOVAL_STRENGTH,
       );
       // Container recovery used to run only while building the ZIP. Apply it
       // to the combined canvas too, so the single PNG keeps pale banners and
@@ -1102,16 +1098,14 @@
       elements.downloadZipButton.textContent = detectedElements.length > 0
         ? `Download ZIP (${detectedElements.length} elements)`
         : "Download ZIP";
-      elements.copyButton.disabled = !latestBlob;
-      showStatus("Asset extracted successfully.");
+      showStatus(`${detectedElements.length} UI ${detectedElements.length === 1 ? "element" : "elements"} ready.`);
       return { width: output.width, height: output.height };
     } catch (error) {
       console.error(error);
       showStatus("Extraction failed. Try a smaller selection.");
       return null;
     } finally {
-      elements.extractButton.disabled = false;
-      elements.extractButton.textContent = "Extract asset";
+      extracting = false;
     }
   }
 
@@ -1125,24 +1119,10 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  async function copyAsset() {
-    if (!latestBlob) return;
-    try {
-      if (!navigator.clipboard || typeof ClipboardItem === "undefined") throw new Error("Clipboard unavailable");
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": latestBlob })]);
-      showStatus("PNG copied to clipboard.");
-    } catch (error) {
-      showStatus("Copy is unavailable here. Download the PNG instead.");
-    }
-  }
-
   function startOver() {
     loadVersion += 1;
     sourceImage = null;
     selection = null;
-    manualBackground = null;
-    pickingBackground = false;
-    renderBackgroundControl();
     elements.fileInput.value = "";
     elements.editorView.hidden = true;
     elements.uploadView.hidden = false;
@@ -1153,10 +1133,6 @@
   elements.chooseButton.addEventListener("click", (event) => {
     event.stopPropagation();
     openPicker();
-  });
-  elements.sampleButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    loadSample();
   });
   elements.dropZone.addEventListener("click", (event) => {
     if (event.target.closest("button")) return;
@@ -1191,20 +1167,6 @@
 
   elements.sourceCanvas.addEventListener("pointerdown", (event) => {
     if (!sourceImage) return;
-    if (pickingBackground) {
-      const point = pointFromEvent(event);
-      const sampleCanvas = document.createElement("canvas");
-      sampleCanvas.width = 1;
-      sampleCanvas.height = 1;
-      const sampleContext = sampleCanvas.getContext("2d", { willReadFrequently: true });
-      sampleContext.drawImage(sourceImage, Math.floor(point.x), Math.floor(point.y), 1, 1, 0, 0, 1, 1);
-      manualBackground = [...sampleContext.getImageData(0, 0, 1, 1).data.slice(0, 3)];
-      pickingBackground = false;
-      renderBackgroundControl();
-      clearResult();
-      showStatus("Background sampled. Extract again to apply it.");
-      return;
-    }
     dragStart = pointFromEvent(event);
     selection = { x: dragStart.x, y: dragStart.y, width: 0, height: 0 };
     elements.sourceCanvas.setPointerCapture(event.pointerId);
@@ -1221,7 +1183,9 @@
     selection = normalizedSelection(dragStart, pointFromEvent(event));
     dragStart = null;
     if (selection.width < MIN_SELECTION || selection.height < MIN_SELECTION) {
-      showStatus("Drag a box around the component, including a little background.");
+      showStatus("Drag a larger box around the UI you want.");
+    } else {
+      window.setTimeout(() => extractAsset(), 0);
     }
     drawSource();
   });
@@ -1249,44 +1213,10 @@
     drawSource();
   });
 
-  elements.strength.addEventListener("input", () => {
-    elements.strengthValue.value = elements.strength.value;
-  });
-  elements.padding.addEventListener("input", () => {
-    elements.paddingValue.value = `${elements.padding.value} px`;
-  });
-  function renderBackgroundControl() {
-    elements.pickBackgroundButton.classList.toggle("active", pickingBackground);
-    elements.sourceCanvas.classList.toggle("picking-background", pickingBackground);
-    elements.autoBackgroundButton.disabled = !manualBackground;
-    if (manualBackground) {
-      const [r, g, b] = manualBackground.map(Math.round);
-      elements.backgroundSwatch.style.background = `rgb(${r}, ${g}, ${b})`;
-      elements.backgroundValue.value = `rgb(${r}, ${g}, ${b})`;
-    } else {
-      elements.backgroundSwatch.style.background = "linear-gradient(135deg, #fff 50%, #d9dfdc 50%)";
-      elements.backgroundValue.value = pickingBackground ? "Pick on canvas" : "Auto";
-    }
-  }
-  elements.pickBackgroundButton.addEventListener("click", () => {
-    if (!sourceImage) return;
-    pickingBackground = !pickingBackground;
-    renderBackgroundControl();
-    if (pickingBackground) showStatus("Click a clean background area in the screenshot.");
-  });
-  elements.autoBackgroundButton.addEventListener("click", () => {
-    manualBackground = null;
-    pickingBackground = false;
-    renderBackgroundControl();
-    clearResult();
-    showStatus("Automatic background detection restored.");
-  });
   elements.newImageButton.addEventListener("click", startOver);
   elements.resetSelectionButton.addEventListener("click", resetSelection);
-  elements.extractButton.addEventListener("click", extractAsset);
   elements.downloadButton.addEventListener("click", downloadAsset);
   elements.downloadZipButton.addEventListener("click", downloadElementsZip);
-  elements.copyButton.addEventListener("click", copyAsset);
 
   function registerWebMcpTools() {
     const context = document.modelContext;
@@ -1309,27 +1239,10 @@
       void Promise.resolve(context.registerTool({
         name: "extract_selected_ui_asset",
         title: "Extract selected UI asset",
-        description: "Apply CutUI's current controls to the visible screenshot selection and show the transparent result.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            strength: { type: "integer", minimum: 8, maximum: 120 },
-            padding: { type: "integer", minimum: 0, maximum: 48 },
-            removeShadows: { type: "boolean" },
-          },
-          additionalProperties: false,
-        },
+        description: "Automatically extract transparent UI assets from the visible screenshot selection.",
+        inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, untrustedContentHint: false },
-        async execute(input = {}) {
-          if (Number.isInteger(input.strength)) {
-            elements.strength.value = input.strength;
-            elements.strengthValue.value = input.strength;
-          }
-          if (Number.isInteger(input.padding)) {
-            elements.padding.value = input.padding;
-            elements.paddingValue.value = `${input.padding} px`;
-          }
-          if (typeof input.removeShadows === "boolean") elements.removeShadows.checked = input.removeShadows;
+        async execute() {
           const result = await extractAsset();
           if (!result) throw new Error("No asset could be extracted from the current selection.");
           return { status: "extracted", ...result };

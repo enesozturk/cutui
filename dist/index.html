@@ -3,174 +3,80 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Extract pixel-faithful UI assets from screenshots in your browser."
-    />
+    <meta name="description" content="Extract pixel-faithful UI assets from screenshots in your browser." />
     <title>CutUI — UI asset extractor</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=10" />
+    <link rel="stylesheet" href="./styles.css?v=11" />
   </head>
   <body>
     <header class="site-header">
       <a class="brand" href="./" aria-label="CutUI home">
         <span class="brand-mark" aria-hidden="true"><i></i></span>
         <span>CutUI</span>
-        <span class="badge">POC</span>
       </a>
-      <div class="local-note">
-        <span class="privacy-dot" aria-hidden="true"></span>
-        Images stay in your browser
-      </div>
+      <div class="local-note"><span class="privacy-dot" aria-hidden="true"></span>Runs locally</div>
     </header>
 
     <main>
       <section id="upload-view" class="upload-view" aria-labelledby="page-title">
         <div class="intro">
-          <p class="eyebrow">UI asset extractor</p>
-          <h1 id="page-title">Pull clean assets from any UI screenshot.</h1>
-          <p class="intro-copy">
-            Select a card, button, or input. CutUI removes the surrounding canvas and keeps the pixels intact.
-          </p>
+          <h1 id="page-title">Extract UI assets.</h1>
+          <p>Drop in a screenshot. CutUI removes its canvas and keeps every original pixel.</p>
         </div>
-
-        <div
-          id="drop-zone"
-          class="drop-zone"
-          role="button"
-          tabindex="0"
-          aria-label="Upload a screenshot"
-        >
+        <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload a screenshot">
           <div class="upload-glyph" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
             </svg>
           </div>
-          <h2>Drop a screenshot here</h2>
-          <p>or choose a PNG, JPG, or WebP up to 10 MB</p>
-          <div class="upload-actions">
-            <button id="choose-button" class="button button-primary" type="button">Choose image</button>
-            <button id="sample-button" class="button button-secondary" type="button">Try sample</button>
-          </div>
+          <h2>Drop a screenshot</h2>
+          <p>PNG, JPG, or WebP · up to 10 MB</p>
+          <button id="choose-button" class="button button-primary" type="button">Choose image</button>
           <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden />
         </div>
-        <p class="paste-hint"><kbd>⌘</kbd><span>+</span><kbd>V</kbd> also works</p>
       </section>
 
       <section id="editor-view" class="editor-view" hidden aria-labelledby="editor-title">
         <div class="editor-heading">
           <div>
-            <p class="eyebrow">Working locally</p>
-            <h1 id="editor-title">Select the asset</h1>
+            <h1 id="editor-title">Extracted UI</h1>
+            <p>Drag on the screenshot to choose another area.</p>
           </div>
           <button id="new-image-button" class="button button-secondary" type="button">New image</button>
         </div>
 
         <div class="workspace">
-          <section class="source-panel panel" aria-labelledby="source-title">
+          <section class="panel" aria-labelledby="source-title">
             <div class="panel-header">
-              <div>
-                <span class="step">01</span>
-                <h2 id="source-title">Screenshot</h2>
-              </div>
-              <button id="reset-selection-button" class="text-button" type="button">Reset selection</button>
+              <h2 id="source-title">Screenshot</h2>
+              <button id="reset-selection-button" class="text-button" type="button">Select all</button>
             </div>
-            <p class="panel-help">Drag around one component and leave a little background around it.</p>
             <div class="canvas-stage source-stage">
-              <canvas
-                id="source-canvas"
-                tabindex="0"
-                aria-label="Screenshot selection canvas. Drag to select an asset. Use arrow keys to move the selection and Shift plus arrow keys to resize it."
-                aria-describedby="selection-status"
-              ></canvas>
+              <canvas id="source-canvas" tabindex="0" aria-label="Screenshot selection canvas. Drag to select an asset." aria-describedby="selection-status"></canvas>
               <p id="selection-status" class="sr-only" aria-live="polite"></p>
             </div>
           </section>
 
-          <section class="result-panel panel" aria-labelledby="result-title">
+          <section class="panel" aria-labelledby="result-title">
             <div class="panel-header">
-              <div>
-                <span class="step">02</span>
-                <h2 id="result-title">Transparent asset</h2>
-              </div>
-              <span id="result-size" class="result-size">Waiting for selection</span>
+              <h2 id="result-title">Transparent result</h2>
+              <span id="result-size" class="result-size">Processing…</span>
             </div>
-            <p class="panel-help">Transparent pixels are shown on the checkerboard.</p>
             <div class="canvas-stage result-stage">
-              <canvas id="result-canvas" aria-label="Extracted transparent asset preview"></canvas>
-              <div id="empty-result" class="empty-result">
-                <span class="empty-icon" aria-hidden="true"></span>
-                <p>Your extracted asset will appear here.</p>
-              </div>
+              <canvas id="result-canvas" aria-label="Extracted transparent UI asset"></canvas>
+              <div id="empty-result" class="empty-result"><span class="loader" aria-hidden="true"></span><p>Extracting pixels…</p></div>
             </div>
           </section>
 
-          <aside class="controls-panel" aria-label="Extraction settings">
-            <div class="control-heading">
-              <span class="step">03</span>
-              <h2>Finish</h2>
-            </div>
-
-            <div class="control-group">
-              <span class="control-label"><span>Background sample</span><output id="background-value">Auto</output></span>
-              <div class="background-actions">
-                <button id="pick-background-button" class="background-button" type="button">
-                  <span id="background-swatch" class="background-swatch" aria-hidden="true"></span>
-                  <span>Pick from image</span>
-                </button>
-                <button id="auto-background-button" class="mini-button" type="button" disabled>Use auto</button>
-              </div>
-            </div>
-
-            <label class="control-group" for="strength-control">
-              <span class="control-label">
-                <span>Removal strength</span>
-                <output id="strength-value">24</output>
-              </span>
-              <input id="strength-control" type="range" min="8" max="120" value="24" />
-              <span class="range-labels"><span>Precise</span><span>Aggressive</span></span>
-            </label>
-
-            <label class="switch-row" for="shadow-control">
-              <span>
-                <strong>Remove shadows</strong>
-                <small>Hard-cut connected drop shadows from exports</small>
-              </span>
-              <span class="switch">
-                <input id="shadow-control" type="checkbox" checked />
-                <span aria-hidden="true"></span>
-              </span>
-            </label>
-
-            <label class="control-group" for="padding-control">
-              <span class="control-label">
-                <span>Output padding</span>
-                <output id="padding-value">12 px</output>
-              </span>
-              <input id="padding-control" type="range" min="0" max="48" value="12" />
-            </label>
-
-            <button id="extract-button" class="button button-primary button-large" type="button">
-              Extract asset
-            </button>
-            <button id="download-button" class="button button-dark button-large" type="button" disabled>
-              Download single PNG
-            </button>
-            <button id="download-zip-button" class="button button-dark button-large" type="button" disabled>
-              Download ZIP
-            </button>
-            <button id="copy-button" class="button button-secondary button-large" type="button" disabled>
-              Copy image
-            </button>
-
-            <p class="control-footnote">Best on flat backgrounds. If auto misses, pick one clean background pixel. No image is uploaded.</p>
-          </aside>
+          <div class="actions" aria-label="Export actions">
+            <button id="download-button" class="button button-primary" type="button" disabled>Download PNG</button>
+            <button id="download-zip-button" class="button button-dark" type="button" disabled>Download ZIP</button>
+          </div>
         </div>
       </section>
 
       <div id="status" class="toast" role="status" aria-live="polite" hidden></div>
     </main>
-
-    <script src="./app.js?v=10" defer></script>
+    <script src="./app.js?v=11" defer></script>
   </body>
 </html>

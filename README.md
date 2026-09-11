@@ -12,11 +12,11 @@ Then open <http://localhost:4173>.
 
 ## How it works
 
-1. Drop or paste a UI screenshot.
-2. Drag a rectangle around one component, leaving a little surrounding background.
-3. CutUI finds the dominant background color along the selection border, or lets you pick it manually.
-4. A border-connected flood fill removes only matching outside pixels.
-5. Connected drop shadows are hard-cut by default while crisp 1–2 px UI borders are treated as protected edges; interior text, icons, and fills keep their original RGB values byte-for-byte.
+1. Drop, choose, or paste a UI screenshot.
+2. CutUI selects the full screenshot and extracts it automatically; drag a rectangle only when you want a smaller area.
+3. It estimates the canvas color from the selection border and removes only background-connected pixels.
+4. Connected shadows are hard-cut while crisp 1–2 px UI borders are protected; foreground RGB values are never regenerated or compressed.
+5. Element detection runs on a bounded analysis copy, then crops exports from the full-resolution result. Large screenshots stay fast without lowering asset quality.
 
 Everything runs with Canvas APIs in the browser. There is no backend, model inference, upload, or API cost.
 
@@ -25,9 +25,9 @@ Everything runs with Canvas APIs in the browser. There is no backend, model infe
 - **Single PNG:** the complete selected composition as one transparent image.
 - **ZIP:** detected connected UI surfaces and grouped text/icon lines as separate transparent PNG files.
 
-Low-contrast, wide containers such as white banners and pill inputs are recovered from their original border geometry so their fill remains intact in both the single PNG and ZIP exports.
+Low-contrast, wide containers such as white banners and pill inputs are recovered from their original border geometry so their fill remains intact in both the single PNG and ZIP exports. Incomplete elements that touch a screenshot edge remain visible in the single PNG but are omitted from the ZIP.
 
-The full screenshot is selected by default, and single PNG output preserves the exact selection frame plus the chosen padding. This keeps edge elements and their relative positions intact.
+The full screenshot is selected by default, and single PNG output preserves the exact selection frame with no automatic trim or padding. This keeps edge elements and their relative positions intact.
 
 ## POC limits
 

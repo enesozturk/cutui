@@ -1,0 +1,121 @@
+[
+  {
+    "name": "dark-cards",
+    "inputPath": "/home/orca/.codex/attachments/4176f004-e4a2-48cc-9cee-3d5a47bcf8db/Screenshot 2026-09-12 at 00.36.17.png",
+    "background": [
+      10,
+      10,
+      10
+    ],
+    "itemCount": 4,
+    "sourceWidth": 1744,
+    "sourceHeight": 1864,
+    "resultWidth": 1744,
+    "resultHeight": 1864,
+    "transparentRatio": 0.22190490018506123,
+    "opaqueRatio": 0.7780950998149387,
+    "elapsedMs": 993
+  },
+  {
+    "name": "dark-system",
+    "inputPath": "/home/orca/.codex/attachments/8933b30c-d3b9-4d67-8eec-6a46e9b8a2ee/Screenshot 2026-09-12 at 00.35.49.png",
+    "background": [
+      10,
+      10,
+      10
+    ],
+    "itemCount": 12,
+    "sourceWidth": 3574,
+    "sourceHeight": 1896,
+    "resultWidth": 3574,
+    "resultHeight": 1896,
+    "transparentRatio": 0.5168453186279718,
+    "opaqueRatio": 0.48315468137202816,
+    "elapsedMs": 1570
+  },
+  {
+    "name": "notes-table",
+    "inputPath": "/home/orca/.codex/attachments/8cd4d6a6-78e4-4d6b-a1ad-adaf3ae9a999/Screenshot 2026-09-12 at 00.35.29.png",
+    "background": [
+      255,
+      255,
+      255
+    ],
+    "itemCount": 13,
+    "sourceWidth": 3028,
+    "sourceHeight": 1106,
+    "resultWidth": 3028,
+    "resultHeight": 1106,
+    "transparentRatio": 0.6049332212191935,
+    "opaqueRatio": 0.3950667787808065,
+    "elapsedMs": 1024
+  },
+  {
+    "name": "profile-form",
+    "inputPath": "/home/orca/.codex/attachments/97515ad6-8e5a-407e-93d3-02463f0b5e46/Screenshot 2026-09-12 at 00.35.18.png",
+    "background": [
+      255,
+      255,
+      255
+    ],
+    "itemCount": 10,
+    "sourceWidth": 3028,
+    "sourceHeight": 1970,
+    "resultWidth": 3028,
+    "resultHeight": 1970,
+    "transparentRatio": 0.25688380529608595,
+    "opaqueRatio": 0.7431161947039141,
+    "elapsedMs": 1270
+  },
+  {
+    "name": "charts",
+    "inputPath": "/home/orca/.codex/attachments/80c1f51d-4820-412c-94b5-e5cbba52d632/Screenshot 2026-09-12 at 00.35.06.png",
+    "background": [
+      254,
+      254,
+      254
+    ],
+    "itemCount": 2,
+    "sourceWidth": 3042,
+    "sourceHeight": 1584,
+    "resultWidth": 3042,
+    "resultHeight": 1584,
+    "transparentRatio": 0.3162420141586808,
+    "opaqueRatio": 0.6837579858413192,
+    "elapsedMs": 1112
+  },
+  {
+    "name": "dashboard",
+    "inputPath": "/home/orca/.codex/attachments/3654d533-3005-4660-862e-7ecb049f9e3b/Screenshot 2026-09-12 at 00.35.00.png",
+    "background": [
+      255,
+      255,
+      255
+    ],
+    "itemCount": 19,
+    "sourceWidth": 3028,
+    "sourceHeight": 1464,
+    "resultWidth": 3028,
+    "resultHeight": 1464,
+    "transparentRatio": 0.3731779800189127,
+    "opaqueRatio": 0.6268220199810872,
+    "elapsedMs": 1026
+  },
+  {
+    "name": "assistant",
+    "inputPath": "/home/orca/.codex/attachments/7a81c4f3-d1c8-4e54-9aee-eef0c141b6c8/Screenshot 2026-09-12 at 00.15.01.png",
+    "background": [
+      255,
+      255,
+      255
+    ],
+    "itemCount": 8,
+    "sourceWidth": 1952,
+    "sourceHeight": 846,
+    "resultWidth": 1952,
+    "resultHeight": 846,
+    "transparentRatio": 0.6791440191063055,
+    "opaqueRatio": 0.32085598089369455,
+    "elapsedMs": 670
+  }
+]
