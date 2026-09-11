@@ -26,7 +26,7 @@
     backgroundValue: document.querySelector("#background-value"),
     strength: document.querySelector("#strength-control"),
     strengthValue: document.querySelector("#strength-value"),
-    keepShadow: document.querySelector("#shadow-control"),
+    removeShadows: document.querySelector("#shadow-control"),
     padding: document.querySelector("#padding-control"),
     paddingValue: document.querySelector("#padding-value"),
     extractButton: document.querySelector("#extract-button"),
@@ -308,9 +308,13 @@
     return Math.sqrt(r * r + g * g + b * b);
   }
 
-  function buildMask(imageData, strength, preserveSoftEdges, backgroundOverride = null) {
+  function buildMask(imageData, strength, removeShadows, backgroundOverride = null) {
     const { width, height, data } = imageData;
     const backgroundColor = backgroundOverride || estimateDominantBorder(imageData);
+    // Shadows are background-connected, so a modest extra margin removes the
+    // soft outer falloff without letting the flood fill cross strong component
+    // edges into pale UI surfaces.
+    const floodThreshold = removeShadows ? Math.min(120, strength + 16) : strength;
     const status = new Uint8Array(width * height);
     const queue = new Int32Array(width * height);
     let queueStart = 0;
@@ -321,7 +325,7 @@
       const x = pixelIndex % width;
       const y = Math.floor(pixelIndex / width);
       const dataIndex = pixelIndex * 4;
-      if (colorDistance(data, dataIndex, backgroundColor) <= strength) {
+      if (colorDistance(data, dataIndex, backgroundColor) <= floodThreshold) {
         status[pixelIndex] = 2;
         queue[queueEnd] = pixelIndex;
         queueEnd += 1;
@@ -358,7 +362,7 @@
     for (let pixelIndex = 0; pixelIndex < status.length; pixelIndex += 1) {
       if (status[pixelIndex] !== 2) continue;
       const dataIndex = pixelIndex * 4;
-      if (!preserveSoftEdges) {
+      if (removeShadows) {
         data[dataIndex + 3] = 0;
         continue;
       }
@@ -1011,7 +1015,7 @@
       const masked = buildMask(
         pixels,
         Number(elements.strength.value),
-        elements.keepShadow.checked,
+        elements.removeShadows.checked,
         backgroundColor,
       );
       // Preserve the exact selection frame. Tight alpha-bound trimming can
@@ -1285,7 +1289,7 @@
           properties: {
             strength: { type: "integer", minimum: 8, maximum: 120 },
             padding: { type: "integer", minimum: 0, maximum: 48 },
-            keepSoftShadows: { type: "boolean" },
+            removeShadows: { type: "boolean" },
           },
           additionalProperties: false,
         },
@@ -1299,7 +1303,7 @@
             elements.padding.value = input.padding;
             elements.paddingValue.value = `${input.padding} px`;
           }
-          if (typeof input.keepSoftShadows === "boolean") elements.keepShadow.checked = input.keepSoftShadows;
+          if (typeof input.removeShadows === "boolean") elements.removeShadows.checked = input.removeShadows;
           const result = await extractAsset();
           if (!result) throw new Error("No asset could be extracted from the current selection.");
           return { status: "extracted", ...result };
