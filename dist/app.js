@@ -2,8 +2,8 @@
   "use strict";
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
-  const MAX_IMAGE_PIXELS = 16_000_000;
-  const MAX_SELECTION_PIXELS = 8_000_000;
+  const MAX_IMAGE_PIXELS = 8_000_000;
+  const MAX_SELECTION_PIXELS = MAX_IMAGE_PIXELS;
   const MIN_SELECTION = 12;
 
   const elements = {
@@ -100,7 +100,7 @@
         return;
       }
       if (image.naturalWidth * image.naturalHeight > MAX_IMAGE_PIXELS) {
-        showStatus("This image is too large. Use an image under 16 megapixels.", 4200);
+        showStatus("This image is too large. Use an image under 8 megapixels.", 4200);
         if (onComplete) onComplete();
         return;
       }
@@ -111,13 +111,11 @@
       elements.sourceCanvas.width = image.naturalWidth;
       elements.sourceCanvas.height = image.naturalHeight;
 
-      const insetX = Math.round(image.naturalWidth * 0.08);
-      const insetY = Math.round(image.naturalHeight * 0.08);
       selection = suggestedSelection || {
-        x: insetX,
-        y: insetY,
-        width: image.naturalWidth - insetX * 2,
-        height: image.naturalHeight - insetY * 2,
+        x: 0,
+        y: 0,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
       };
 
       clearResult();
@@ -126,7 +124,7 @@
       elements.editorView.hidden = false;
       elements.editorView.scrollIntoView({ behavior: "smooth", block: "start" });
       elements.sourceCanvas.focus({ preventScroll: true });
-      showStatus("Image ready — drag around one UI component.");
+      showStatus("Image ready — the full screenshot is selected.");
       if (onComplete) onComplete();
     };
     image.onerror = () => {
@@ -225,13 +223,11 @@
 
   function resetSelection() {
     if (!sourceImage) return;
-    const insetX = Math.round(sourceImage.naturalWidth * 0.08);
-    const insetY = Math.round(sourceImage.naturalHeight * 0.08);
     selection = {
-      x: insetX,
-      y: insetY,
-      width: sourceImage.naturalWidth - insetX * 2,
-      height: sourceImage.naturalHeight - insetY * 2,
+      x: 0,
+      y: 0,
+      width: sourceImage.naturalWidth,
+      height: sourceImage.naturalHeight,
     };
     clearResult();
     drawSource();
@@ -382,55 +378,33 @@
     return imageData;
   }
 
-  function trimAndPad(imageData, padding) {
+  function frameAndPad(imageData, padding) {
     const { width, height, data } = imageData;
-    let minX = width;
-    let minY = height;
-    let maxX = -1;
-    let maxY = -1;
-
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        if (data[(y * width + x) * 4 + 3] > 2) {
-          minX = Math.min(minX, x);
-          minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x);
-          maxY = Math.max(maxY, y);
-        }
-      }
+    let hasForeground = false;
+    for (let pixelIndex = 0; pixelIndex < width * height; pixelIndex += 1) {
+      if (data[pixelIndex * 4 + 3] <= 2) continue;
+      hasForeground = true;
+      break;
     }
+    if (!hasForeground) return null;
 
-    if (maxX < minX || maxY < minY) return null;
-
-    const cropWidth = maxX - minX + 1;
-    const cropHeight = maxY - minY + 1;
     const tempCanvas = document.createElement("canvas");
     tempCanvas.width = width;
     tempCanvas.height = height;
     tempCanvas.getContext("2d").putImageData(imageData, 0, 0);
 
     const output = document.createElement("canvas");
-    output.width = cropWidth + padding * 2;
-    output.height = cropHeight + padding * 2;
+    output.width = width + padding * 2;
+    output.height = height + padding * 2;
     const outputContext = output.getContext("2d");
     outputContext.imageSmoothingEnabled = false;
-    outputContext.drawImage(
-      tempCanvas,
-      minX,
-      minY,
-      cropWidth,
-      cropHeight,
-      padding,
-      padding,
-      cropWidth,
-      cropHeight,
-    );
+    outputContext.drawImage(tempCanvas, padding, padding);
     return {
       canvas: output,
-      sourceX: minX,
-      sourceY: minY,
-      sourceWidth: cropWidth,
-      sourceHeight: cropHeight,
+      sourceX: 0,
+      sourceY: 0,
+      sourceWidth: width,
+      sourceHeight: height,
       padding,
     };
   }
@@ -1040,15 +1014,18 @@
         elements.keepShadow.checked,
         backgroundColor,
       );
-      const trimmed = trimAndPad(masked, Number(elements.padding.value));
+      // Preserve the exact selection frame. Tight alpha-bound trimming can
+      // silently discard UI touching the left/right edges and changes the
+      // relative positioning expected from a combined screenshot export.
+      const framed = frameAndPad(masked, Number(elements.padding.value));
 
-      if (!trimmed) {
+      if (!framed) {
         clearResult();
         showStatus("No foreground found. Lower the removal strength and try again.");
         return null;
       }
 
-      const output = trimmed.canvas;
+      const output = framed.canvas;
       latestOriginalCanvas = document.createElement("canvas");
       latestOriginalCanvas.width = output.width;
       latestOriginalCanvas.height = output.height;
@@ -1056,14 +1033,14 @@
       originalContext.imageSmoothingEnabled = false;
       originalContext.drawImage(
         cropCanvas,
-        trimmed.sourceX,
-        trimmed.sourceY,
-        trimmed.sourceWidth,
-        trimmed.sourceHeight,
-        trimmed.padding,
-        trimmed.padding,
-        trimmed.sourceWidth,
-        trimmed.sourceHeight,
+        framed.sourceX,
+        framed.sourceY,
+        framed.sourceWidth,
+        framed.sourceHeight,
+        framed.padding,
+        framed.padding,
+        framed.sourceWidth,
+        framed.sourceHeight,
       );
 
       elements.resultCanvas.width = output.width;

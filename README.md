@@ -27,6 +27,8 @@ Everything runs with Canvas APIs in the browser. There is no backend, model infe
 
 Low-contrast, wide containers such as white banners and pill inputs are recovered from their original border geometry so their fill remains intact in both the single PNG and ZIP exports.
 
+The full screenshot is selected by default, and single PNG output preserves the exact selection frame plus the chosen padding. This keeps edge elements and their relative positions intact.
+
 ## POC limits
 
 - Best on flat or softly graded backgrounds.
