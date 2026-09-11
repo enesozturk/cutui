@@ -20,6 +20,10 @@
     resultCanvas: document.querySelector("#result-canvas"),
     emptyResult: document.querySelector("#empty-result"),
     resultSize: document.querySelector("#result-size"),
+    pickBackgroundButton: document.querySelector("#pick-background-button"),
+    autoBackgroundButton: document.querySelector("#auto-background-button"),
+    backgroundSwatch: document.querySelector("#background-swatch"),
+    backgroundValue: document.querySelector("#background-value"),
     strength: document.querySelector("#strength-control"),
     strengthValue: document.querySelector("#strength-value"),
     keepShadow: document.querySelector("#shadow-control"),
@@ -41,6 +45,8 @@
   let latestBlob = null;
   let toastTimer = null;
   let loadVersion = 0;
+  let manualBackground = null;
+  let pickingBackground = false;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -87,6 +93,9 @@
         return;
       }
       sourceImage = image;
+      manualBackground = null;
+      pickingBackground = false;
+      renderBackgroundControl();
       elements.sourceCanvas.width = image.naturalWidth;
       elements.sourceCanvas.height = image.naturalHeight;
 
@@ -227,41 +236,57 @@
     elements.copyButton.disabled = true;
   }
 
-  function samplePatch(data, width, startX, startY, patchWidth, patchHeight) {
-    const channels = [[], [], []];
-    for (let y = startY; y < startY + patchHeight; y += 1) {
-      for (let x = startX; x < startX + patchWidth; x += 1) {
-        const index = (y * width + x) * 4;
-        channels[0].push(data[index]);
-        channels[1].push(data[index + 1]);
-        channels[2].push(data[index + 2]);
-      }
-    }
-    return channels.map((values) => {
-      values.sort((a, b) => a - b);
-      return values[Math.floor(values.length / 2)];
-    });
-  }
-
-  function estimateCorners(imageData) {
+  function estimateDominantBorder(imageData) {
     const { width, height, data } = imageData;
-    const patch = clamp(Math.floor(Math.min(width, height) * 0.045), 2, 18);
-    return {
-      topLeft: samplePatch(data, width, 0, 0, patch, patch),
-      topRight: samplePatch(data, width, width - patch, 0, patch, patch),
-      bottomLeft: samplePatch(data, width, 0, height - patch, patch, patch),
-      bottomRight: samplePatch(data, width, width - patch, height - patch, patch, patch),
-    };
-  }
+    const strip = clamp(Math.floor(Math.min(width, height) * 0.025), 2, 12);
+    const counts = new Uint32Array(4096);
+    const red = new Float64Array(4096);
+    const green = new Float64Array(4096);
+    const blue = new Float64Array(4096);
 
-  function backgroundAt(corners, x, y, width, height) {
-    const tx = width <= 1 ? 0 : x / (width - 1);
-    const ty = height <= 1 ? 0 : y / (height - 1);
-    return [0, 1, 2].map((channel) => {
-      const top = corners.topLeft[channel] * (1 - tx) + corners.topRight[channel] * tx;
-      const bottom = corners.bottomLeft[channel] * (1 - tx) + corners.bottomRight[channel] * tx;
-      return top * (1 - ty) + bottom * ty;
+    const forEachBorderPixel = (callback) => {
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          if (x >= strip && x < width - strip && y >= strip && y < height - strip) {
+            x = width - strip - 1;
+            continue;
+          }
+          const index = (y * width + x) * 4;
+          callback(data[index], data[index + 1], data[index + 2]);
+        }
+      }
+    };
+
+    forEachBorderPixel((r, g, b) => {
+      const bin = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      counts[bin] += 1;
+      red[bin] += r;
+      green[bin] += g;
+      blue[bin] += b;
     });
+
+    let dominant = 0;
+    for (let bin = 1; bin < counts.length; bin += 1) {
+      if (counts[bin] > counts[dominant]) dominant = bin;
+    }
+
+    const count = Math.max(1, counts[dominant]);
+    const firstPass = [red[dominant] / count, green[dominant] / count, blue[dominant] / count];
+    const refined = [0, 0, 0];
+    let refinedCount = 0;
+    forEachBorderPixel((r, g, b) => {
+      const dr = r - firstPass[0];
+      const dg = g - firstPass[1];
+      const db = b - firstPass[2];
+      if (Math.sqrt(dr * dr + dg * dg + db * db) > 26) return;
+      refined[0] += r;
+      refined[1] += g;
+      refined[2] += b;
+      refinedCount += 1;
+    });
+
+    if (refinedCount === 0) return firstPass;
+    return refined.map((channel) => channel / refinedCount);
   }
 
   function colorDistance(data, index, background) {
@@ -271,9 +296,9 @@
     return Math.sqrt(r * r + g * g + b * b);
   }
 
-  function buildMask(imageData, strength, preserveSoftEdges) {
+  function buildMask(imageData, strength, preserveSoftEdges, backgroundOverride = null) {
     const { width, height, data } = imageData;
-    const corners = estimateCorners(imageData);
+    const backgroundColor = backgroundOverride || estimateDominantBorder(imageData);
     const status = new Uint8Array(width * height);
     const queue = new Int32Array(width * height);
     let queueStart = 0;
@@ -284,8 +309,7 @@
       const x = pixelIndex % width;
       const y = Math.floor(pixelIndex / width);
       const dataIndex = pixelIndex * 4;
-      const background = backgroundAt(corners, x, y, width, height);
-      if (colorDistance(data, dataIndex, background) <= strength) {
+      if (colorDistance(data, dataIndex, backgroundColor) <= strength) {
         status[pixelIndex] = 2;
         queue[queueEnd] = pixelIndex;
         queueEnd += 1;
@@ -328,8 +352,7 @@
       }
       const x = pixelIndex % width;
       const y = Math.floor(pixelIndex / width);
-      const background = backgroundAt(corners, x, y, width, height);
-      const distance = colorDistance(data, dataIndex, background);
+      const distance = colorDistance(data, dataIndex, backgroundColor);
       if (distance <= noiseFloor) {
         data[dataIndex + 3] = 0;
         continue;
@@ -416,7 +439,12 @@
       cropContext.imageSmoothingEnabled = false;
       cropContext.drawImage(sourceImage, x, y, width, height, 0, 0, width, height);
       const pixels = cropContext.getImageData(0, 0, width, height);
-      const masked = buildMask(pixels, Number(elements.strength.value), elements.keepShadow.checked);
+      const masked = buildMask(
+        pixels,
+        Number(elements.strength.value),
+        elements.keepShadow.checked,
+        manualBackground,
+      );
       const output = trimAndPad(masked, Number(elements.padding.value));
 
       if (!output) {
@@ -474,6 +502,9 @@
     loadVersion += 1;
     sourceImage = null;
     selection = null;
+    manualBackground = null;
+    pickingBackground = false;
+    renderBackgroundControl();
     elements.fileInput.value = "";
     elements.editorView.hidden = true;
     elements.uploadView.hidden = false;
@@ -522,6 +553,20 @@
 
   elements.sourceCanvas.addEventListener("pointerdown", (event) => {
     if (!sourceImage) return;
+    if (pickingBackground) {
+      const point = pointFromEvent(event);
+      const sampleCanvas = document.createElement("canvas");
+      sampleCanvas.width = 1;
+      sampleCanvas.height = 1;
+      const sampleContext = sampleCanvas.getContext("2d", { willReadFrequently: true });
+      sampleContext.drawImage(sourceImage, Math.floor(point.x), Math.floor(point.y), 1, 1, 0, 0, 1, 1);
+      manualBackground = [...sampleContext.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      pickingBackground = false;
+      renderBackgroundControl();
+      clearResult();
+      showStatus("Background sampled. Extract again to apply it.");
+      return;
+    }
     dragStart = pointFromEvent(event);
     selection = { x: dragStart.x, y: dragStart.y, width: 0, height: 0 };
     elements.sourceCanvas.setPointerCapture(event.pointerId);
@@ -571,6 +616,32 @@
   });
   elements.padding.addEventListener("input", () => {
     elements.paddingValue.value = `${elements.padding.value} px`;
+  });
+  function renderBackgroundControl() {
+    elements.pickBackgroundButton.classList.toggle("active", pickingBackground);
+    elements.sourceCanvas.classList.toggle("picking-background", pickingBackground);
+    elements.autoBackgroundButton.disabled = !manualBackground;
+    if (manualBackground) {
+      const [r, g, b] = manualBackground.map(Math.round);
+      elements.backgroundSwatch.style.background = `rgb(${r}, ${g}, ${b})`;
+      elements.backgroundValue.value = `rgb(${r}, ${g}, ${b})`;
+    } else {
+      elements.backgroundSwatch.style.background = "linear-gradient(135deg, #fff 50%, #d9dfdc 50%)";
+      elements.backgroundValue.value = pickingBackground ? "Pick on canvas" : "Auto";
+    }
+  }
+  elements.pickBackgroundButton.addEventListener("click", () => {
+    if (!sourceImage) return;
+    pickingBackground = !pickingBackground;
+    renderBackgroundControl();
+    if (pickingBackground) showStatus("Click a clean background area in the screenshot.");
+  });
+  elements.autoBackgroundButton.addEventListener("click", () => {
+    manualBackground = null;
+    pickingBackground = false;
+    renderBackgroundControl();
+    clearResult();
+    showStatus("Automatic background detection restored.");
   });
   elements.newImageButton.addEventListener("click", startOver);
   elements.resetSelectionButton.addEventListener("click", resetSelection);

@@ -14,7 +14,7 @@ Then open <http://localhost:4173>.
 
 1. Drop or paste a UI screenshot.
 2. Drag a rectangle around one component, leaving a little surrounding background.
-3. CutUI estimates a simple bilinear background from the selection corners.
+3. CutUI finds the dominant background color along the selection border, or lets you pick it manually.
 4. A border-connected flood fill removes only matching outside pixels.
 5. Only border-connected background pixels receive a smooth alpha; interior text, icons, and fills keep their original RGB values byte-for-byte.
 

@@ -9,7 +9,7 @@
     />
     <title>CutUI — UI asset extractor</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=2" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
     <header class="site-header">
@@ -111,6 +111,17 @@
               <h2>Finish</h2>
             </div>
 
+            <div class="control-group">
+              <span class="control-label"><span>Background sample</span><output id="background-value">Auto</output></span>
+              <div class="background-actions">
+                <button id="pick-background-button" class="background-button" type="button">
+                  <span id="background-swatch" class="background-swatch" aria-hidden="true"></span>
+                  <span>Pick from image</span>
+                </button>
+                <button id="auto-background-button" class="mini-button" type="button" disabled>Use auto</button>
+              </div>
+            </div>
+
             <label class="control-group" for="strength-control">
               <span class="control-label">
                 <span>Removal strength</span>
@@ -149,7 +160,7 @@
               Copy image
             </button>
 
-            <p class="control-footnote">Best on flat or softly graded backgrounds. No image is uploaded. Clipboard copy may require HTTPS.</p>
+            <p class="control-footnote">Best on flat backgrounds. If auto misses, pick one clean background pixel. No image is uploaded.</p>
           </aside>
         </div>
       </section>
@@ -157,6 +168,6 @@
       <div id="status" class="toast" role="status" aria-live="polite" hidden></div>
     </main>
 
-    <script src="./app.js?v=2" defer></script>
+    <script src="./app.js?v=3" defer></script>
   </body>
 </html>
