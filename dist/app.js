@@ -175,16 +175,22 @@
     sourceContext.fill("evenodd");
 
     const scale = canvas.width / Math.max(canvas.getBoundingClientRect().width, 1);
-    sourceContext.strokeStyle = "#b9ff66";
-    sourceContext.lineWidth = Math.max(2, 2 * scale);
+    sourceContext.strokeStyle = "rgba(255, 255, 255, 0.98)";
+    sourceContext.lineWidth = Math.max(3, 3 * scale);
+    sourceContext.strokeRect(x, y, width, height);
+    sourceContext.strokeStyle = "rgba(23, 23, 23, 0.9)";
+    sourceContext.lineWidth = Math.max(1, 1 * scale);
     sourceContext.setLineDash([8 * scale, 5 * scale]);
     sourceContext.strokeRect(x, y, width, height);
     sourceContext.setLineDash([]);
 
     const handleSize = 8 * scale;
-    sourceContext.fillStyle = "#b9ff66";
+    sourceContext.fillStyle = "#ffffff";
+    sourceContext.strokeStyle = "#171717";
+    sourceContext.lineWidth = Math.max(1, scale);
     [[x, y], [x + width, y], [x, y + height], [x + width, y + height]].forEach(([hx, hy]) => {
       sourceContext.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+      sourceContext.strokeRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
     });
     sourceContext.restore();
     elements.selectionStatus.textContent = `Selection: ${Math.round(width)} by ${Math.round(height)} pixels, starting at ${Math.round(x)}, ${Math.round(y)}.`;

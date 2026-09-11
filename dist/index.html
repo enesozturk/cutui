@@ -6,7 +6,7 @@
     <meta name="description" content="Extract pixel-faithful UI assets from screenshots in your browser." />
     <title>CutUI — UI asset extractor</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=11" />
+    <link rel="stylesheet" href="./styles.css?v=12" />
   </head>
   <body>
     <header class="site-header">
@@ -14,14 +14,17 @@
         <span class="brand-mark" aria-hidden="true"><i></i></span>
         <span>CutUI</span>
       </a>
-      <div class="local-note"><span class="privacy-dot" aria-hidden="true"></span>Runs locally</div>
+      <div class="local-note">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.75 8V6.25a3.25 3.25 0 0 1 6.5 0V8m-7.5 0h8.5a1 1 0 0 1 1 1v6.25a1 1 0 0 1-1 1h-8.5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" /></svg>
+        Processed on your device
+      </div>
     </header>
 
     <main>
       <section id="upload-view" class="upload-view" aria-labelledby="page-title">
         <div class="intro">
-          <h1 id="page-title">Extract UI assets.</h1>
-          <p>Drop in a screenshot. CutUI removes its canvas and keeps every original pixel.</p>
+          <h1 id="page-title">Extract UI assets</h1>
+          <p>Turn a screenshot into a transparent PNG or a ZIP of separated elements.</p>
         </div>
         <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload a screenshot">
           <div class="upload-glyph" aria-hidden="true">
@@ -29,9 +32,10 @@
               <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
             </svg>
           </div>
-          <h2>Drop a screenshot</h2>
-          <p>PNG, JPG, or WebP · up to 10 MB</p>
-          <button id="choose-button" class="button button-primary" type="button">Choose image</button>
+          <h2>Drop your screenshot here</h2>
+          <p>or browse from your computer</p>
+          <button id="choose-button" class="button button-primary" type="button">Choose screenshot</button>
+          <span class="upload-meta">PNG, JPG or WebP · 10 MB max</span>
           <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden />
         </div>
       </section>
@@ -39,8 +43,8 @@
       <section id="editor-view" class="editor-view" hidden aria-labelledby="editor-title">
         <div class="editor-heading">
           <div>
-            <h1 id="editor-title">Extracted UI</h1>
-            <p>Drag on the screenshot to choose another area.</p>
+            <h1 id="editor-title">Review extraction</h1>
+            <p>Drag on the original to extract a smaller region.</p>
           </div>
           <button id="new-image-button" class="button button-secondary" type="button">New image</button>
         </div>
@@ -48,7 +52,7 @@
         <div class="workspace">
           <section class="panel" aria-labelledby="source-title">
             <div class="panel-header">
-              <h2 id="source-title">Screenshot</h2>
+              <h2 id="source-title">Original</h2>
               <button id="reset-selection-button" class="text-button" type="button">Select all</button>
             </div>
             <div class="canvas-stage source-stage">
@@ -59,7 +63,7 @@
 
           <section class="panel" aria-labelledby="result-title">
             <div class="panel-header">
-              <h2 id="result-title">Transparent result</h2>
+              <h2 id="result-title">Result</h2>
               <span id="result-size" class="result-size">Processing…</span>
             </div>
             <div class="canvas-stage result-stage">
@@ -69,6 +73,7 @@
           </section>
 
           <div class="actions" aria-label="Export actions">
+            <p>Export at the original resolution</p>
             <button id="download-button" class="button button-primary" type="button" disabled>Download PNG</button>
             <button id="download-zip-button" class="button button-dark" type="button" disabled>Download ZIP</button>
           </div>
@@ -77,6 +82,6 @@
 
       <div id="status" class="toast" role="status" aria-live="polite" hidden></div>
     </main>
-    <script src="./app.js?v=11" defer></script>
+    <script src="./app.js?v=12" defer></script>
   </body>
 </html>
