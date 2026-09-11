@@ -49,6 +49,7 @@
   let manualBackground = null;
   let pickingBackground = false;
   let detectedElements = [];
+  let latestOriginalCanvas = null;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -248,6 +249,7 @@
     elements.downloadZipButton.textContent = "Download ZIP";
     elements.copyButton.disabled = true;
     detectedElements = [];
+    latestOriginalCanvas = null;
   }
 
   function estimateDominantBorder(imageData) {
@@ -423,10 +425,143 @@
       cropWidth,
       cropHeight,
     );
-    return output;
+    return {
+      canvas: output,
+      sourceX: minX,
+      sourceY: minY,
+      sourceWidth: cropWidth,
+      sourceHeight: cropHeight,
+      padding,
+    };
   }
 
-  function detectUiElements(canvas) {
+  function detectLowContrastContainers(canvas, backgroundColor, strength) {
+    if (!canvas || !backgroundColor) return [];
+    const scale = Math.min(1, 1400 / Math.max(canvas.width, canvas.height));
+    const width = Math.max(1, Math.round(canvas.width * scale));
+    const height = Math.max(1, Math.round(canvas.height * scale));
+    const analysisCanvas = document.createElement("canvas");
+    analysisCanvas.width = width;
+    analysisCanvas.height = height;
+    const context = analysisCanvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(canvas, 0, 0, width, height);
+    const pixels = context.getImageData(0, 0, width, height).data;
+    const binary = new Uint8Array(width * height);
+    const horizontal = new Uint8Array(width * height);
+    const dilated = new Uint8Array(width * height);
+    const threshold = Math.max(4, Math.min(12, strength * 0.34));
+    const radius = 2;
+
+    for (let pixelIndex = 0; pixelIndex < binary.length; pixelIndex += 1) {
+      if (pixels[pixelIndex * 4 + 3] === 0) continue;
+      if (colorDistance(pixels, pixelIndex * 4, backgroundColor) > threshold) binary[pixelIndex] = 1;
+    }
+
+    for (let y = 0; y < height; y += 1) {
+      let count = 0;
+      for (let x = 0; x < width; x += 1) {
+        if (x + radius < width) count += binary[y * width + x + radius];
+        if (x - radius - 1 >= 0) count -= binary[y * width + x - radius - 1];
+        if (count > 0) horizontal[y * width + x] = 1;
+      }
+    }
+    for (let x = 0; x < width; x += 1) {
+      let count = 0;
+      for (let y = 0; y < height; y += 1) {
+        if (y + radius < height) count += horizontal[(y + radius) * width + x];
+        if (y - radius - 1 >= 0) count -= horizontal[(y - radius - 1) * width + x];
+        if (count > 0) dilated[y * width + x] = 1;
+      }
+    }
+
+    const visited = new Uint8Array(width * height);
+    const queue = new Int32Array(width * height);
+    const containers = [];
+    for (let start = 0; start < visited.length; start += 1) {
+      if (visited[start] || !dilated[start]) continue;
+      let queueStart = 0;
+      let queueEnd = 0;
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+      visited[start] = 1;
+      queue[queueEnd++] = start;
+
+      while (queueStart < queueEnd) {
+        const pixelIndex = queue[queueStart++];
+        const x = pixelIndex % width;
+        const y = Math.floor(pixelIndex / width);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+        if (x > 0 && !visited[pixelIndex - 1] && dilated[pixelIndex - 1]) {
+          visited[pixelIndex - 1] = 1;
+          queue[queueEnd++] = pixelIndex - 1;
+        }
+        if (x < width - 1 && !visited[pixelIndex + 1] && dilated[pixelIndex + 1]) {
+          visited[pixelIndex + 1] = 1;
+          queue[queueEnd++] = pixelIndex + 1;
+        }
+        if (y > 0 && !visited[pixelIndex - width] && dilated[pixelIndex - width]) {
+          visited[pixelIndex - width] = 1;
+          queue[queueEnd++] = pixelIndex - width;
+        }
+        if (y < height - 1 && !visited[pixelIndex + width] && dilated[pixelIndex + width]) {
+          visited[pixelIndex + width] = 1;
+          queue[queueEnd++] = pixelIndex + width;
+        }
+      }
+
+      const boxWidth = maxX - minX + 1;
+      const boxHeight = maxY - minY + 1;
+      const aspect = boxWidth / Math.max(1, boxHeight);
+      if (
+        boxWidth < width * 0.38
+        || boxHeight < Math.max(22, height * 0.022)
+        || boxHeight > height * 0.2
+        || aspect < 4
+      ) continue;
+
+      let backgroundPixels = 0;
+      let sampledPixels = 0;
+      const sampleStep = 3;
+      const interiorX = Math.round(boxWidth * 0.06);
+      const interiorY = Math.round(boxHeight * 0.14);
+      for (let y = minY + interiorY; y <= maxY - interiorY; y += sampleStep) {
+        for (let x = minX + interiorX; x <= maxX - interiorX; x += sampleStep) {
+          const pixelIndex = y * width + x;
+          if (pixels[pixelIndex * 4 + 3] === 0) continue;
+          sampledPixels += 1;
+          if (colorDistance(pixels, pixelIndex * 4, backgroundColor) <= Math.max(18, strength)) {
+            backgroundPixels += 1;
+          }
+        }
+      }
+      if (sampledPixels === 0 || backgroundPixels / sampledPixels < 0.58) continue;
+
+      const rawX = clamp(Math.round((minX + radius) / scale), 0, canvas.width - 1);
+      const rawY = clamp(Math.round((minY + radius) / scale), 0, canvas.height - 1);
+      const rawRight = clamp(Math.round((maxX - radius + 1) / scale), rawX + 1, canvas.width);
+      const rawBottom = clamp(Math.round((maxY - radius + 1) / scale), rawY + 1, canvas.height);
+      const padding = clamp(Math.round((rawBottom - rawY) * 0.08), 5, 12);
+      const x = Math.max(0, rawX - padding);
+      const y = Math.max(0, rawY - padding);
+      const right = Math.min(canvas.width, rawRight + padding);
+      const bottom = Math.min(canvas.height, rawBottom + padding);
+      containers.push({
+        x,
+        y,
+        width: right - x,
+        height: bottom - y,
+        kind: "container",
+      });
+    }
+    return containers;
+  }
+
+  function detectUiElements(canvas, originalCanvas = null, backgroundColor = null, strength = 24) {
     const context = canvas.getContext("2d", { willReadFrequently: true });
     const { width, height } = canvas;
     const pixels = context.getImageData(0, 0, width, height).data;
@@ -558,8 +693,26 @@
         const y = Math.max(0, component.y - padding);
         const right = Math.min(width, component.x + component.width + padding);
         const bottom = Math.min(height, component.y + component.height + padding);
-        return { x, y, width: right - x, height: bottom - y };
+        return { x, y, width: right - x, height: bottom - y, kind: "masked" };
       });
+
+    const recoveredContainers = detectLowContrastContainers(originalCanvas, backgroundColor, strength);
+    const outsideContainers = result.filter((element) => !recoveredContainers.some((container) => {
+      const centerX = element.x + element.width / 2;
+      const centerY = element.y + element.height / 2;
+      if (
+        centerX >= container.x
+        && centerX <= container.x + container.width
+        && centerY >= container.y
+        && centerY <= container.y + container.height
+      ) return true;
+      const overlapWidth = Math.max(0, Math.min(element.x + element.width, container.x + container.width) - Math.max(element.x, container.x));
+      const overlapHeight = Math.max(0, Math.min(element.y + element.height, container.y + container.height) - Math.max(element.y, container.y));
+      return (overlapWidth * overlapHeight) / Math.max(1, element.width * element.height) > 0.4;
+    }));
+
+    result.length = 0;
+    result.push(...recoveredContainers, ...outsideContainers);
 
     result.sort((a, b) => {
       const rowTolerance = Math.max(12, Math.min(a.height, b.height) * 0.35);
@@ -673,6 +826,110 @@
     });
   }
 
+  function restoreClosedContainerInterior(canvas, originalCanvas, element) {
+    if (!originalCanvas || element.kind !== "container") return;
+    const width = canvas.width;
+    const height = canvas.height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    const result = context.getImageData(0, 0, width, height);
+    const originalContext = originalCanvas.getContext("2d", { willReadFrequently: true });
+    const original = originalContext.getImageData(element.x, element.y, width, height);
+    const barrier = new Uint8Array(width * height);
+    const sealed = new Uint8Array(width * height);
+    const exterior = new Uint8Array(width * height);
+    const queue = new Int32Array(width * height);
+
+    for (let pixelIndex = 0; pixelIndex < barrier.length; pixelIndex += 1) {
+      if (result.data[pixelIndex * 4 + 3] > 3) barrier[pixelIndex] = 1;
+    }
+
+    // Close one-pixel gaps in faint borders so the flood fill cannot leak
+    // into a white banner/input whose fill matches the page background.
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const pixelIndex = y * width + x;
+        if (barrier[pixelIndex]) {
+          sealed[pixelIndex] = 1;
+          continue;
+        }
+        for (let dy = -1; dy <= 1 && !sealed[pixelIndex]; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            const nextX = x + dx;
+            const nextY = y + dy;
+            if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) continue;
+            if (barrier[nextY * width + nextX]) {
+              sealed[pixelIndex] = 1;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    let queueStart = 0;
+    let queueEnd = 0;
+    const visit = (pixelIndex) => {
+      if (exterior[pixelIndex] || sealed[pixelIndex]) return;
+      exterior[pixelIndex] = 1;
+      queue[queueEnd++] = pixelIndex;
+    };
+    for (let x = 0; x < width; x += 1) {
+      visit(x);
+      visit((height - 1) * width + x);
+    }
+    for (let y = 1; y < height - 1; y += 1) {
+      visit(y * width);
+      visit(y * width + width - 1);
+    }
+    while (queueStart < queueEnd) {
+      const pixelIndex = queue[queueStart++];
+      const x = pixelIndex % width;
+      const y = Math.floor(pixelIndex / width);
+      if (x > 0) visit(pixelIndex - 1);
+      if (x < width - 1) visit(pixelIndex + 1);
+      if (y > 0) visit(pixelIndex - width);
+      if (y < height - 1) visit(pixelIndex + width);
+    }
+
+    let restoredPixels = 0;
+    for (let pixelIndex = 0; pixelIndex < exterior.length; pixelIndex += 1) {
+      if (exterior[pixelIndex] || original.data[pixelIndex * 4 + 3] === 0) continue;
+      const offset = pixelIndex * 4;
+      result.data[offset] = original.data[offset];
+      result.data[offset + 1] = original.data[offset + 1];
+      result.data[offset + 2] = original.data[offset + 2];
+      result.data[offset + 3] = original.data[offset + 3];
+      restoredPixels += 1;
+    }
+
+    // If the source border was too faint to close, fall back to a conservative
+    // rounded container mask instead of returning disconnected text fragments.
+    if (restoredPixels < width * height * 0.08) {
+      const inset = clamp(Math.round(height * 0.055), 4, 12);
+      const left = inset;
+      const top = inset;
+      const right = width - inset;
+      const bottom = height - inset;
+      const radius = Math.min((bottom - top) / 2, Math.max(12, (bottom - top) * 0.3));
+      for (let y = top; y < bottom; y += 1) {
+        for (let x = left; x < right; x += 1) {
+          const nearestX = clamp(x, left + radius, right - radius);
+          const nearestY = clamp(y, top + radius, bottom - radius);
+          const dx = x - nearestX;
+          const dy = y - nearestY;
+          if (dx * dx + dy * dy > radius * radius) continue;
+          const offset = (y * width + x) * 4;
+          if (original.data[offset + 3] === 0) continue;
+          result.data[offset] = original.data[offset];
+          result.data[offset + 1] = original.data[offset + 1];
+          result.data[offset + 2] = original.data[offset + 2];
+          result.data[offset + 3] = original.data[offset + 3];
+        }
+      }
+    }
+    context.putImageData(result, 0, 0);
+  }
+
   async function downloadElementsZip() {
     if (!latestBlob || detectedElements.length === 0) return;
     const originalLabel = elements.downloadZipButton.textContent;
@@ -699,6 +956,7 @@
           element.width,
           element.height,
         );
+        restoreClosedContainerInterior(canvas, latestOriginalCanvas, element);
         const number = String(index + 1).padStart(2, "0");
         files.push({ name: `${sourceName}-element-${number}.png`, bytes: await canvasToPngBytes(canvas) });
       }
@@ -747,19 +1005,38 @@
       cropContext.imageSmoothingEnabled = false;
       cropContext.drawImage(sourceImage, x, y, width, height, 0, 0, width, height);
       const pixels = cropContext.getImageData(0, 0, width, height);
+      const backgroundColor = manualBackground || estimateDominantBorder(pixels);
       const masked = buildMask(
         pixels,
         Number(elements.strength.value),
         elements.keepShadow.checked,
-        manualBackground,
+        backgroundColor,
       );
-      const output = trimAndPad(masked, Number(elements.padding.value));
+      const trimmed = trimAndPad(masked, Number(elements.padding.value));
 
-      if (!output) {
+      if (!trimmed) {
         clearResult();
         showStatus("No foreground found. Lower the removal strength and try again.");
         return null;
       }
+
+      const output = trimmed.canvas;
+      latestOriginalCanvas = document.createElement("canvas");
+      latestOriginalCanvas.width = output.width;
+      latestOriginalCanvas.height = output.height;
+      const originalContext = latestOriginalCanvas.getContext("2d");
+      originalContext.imageSmoothingEnabled = false;
+      originalContext.drawImage(
+        cropCanvas,
+        trimmed.sourceX,
+        trimmed.sourceY,
+        trimmed.sourceWidth,
+        trimmed.sourceHeight,
+        trimmed.padding,
+        trimmed.padding,
+        trimmed.sourceWidth,
+        trimmed.sourceHeight,
+      );
 
       elements.resultCanvas.width = output.width;
       elements.resultCanvas.height = output.height;
@@ -771,7 +1048,12 @@
       elements.resultSize.textContent = `${output.width} × ${output.height} px`;
 
       latestBlob = await new Promise((resolve) => elements.resultCanvas.toBlob(resolve, "image/png"));
-      detectedElements = detectUiElements(elements.resultCanvas);
+      detectedElements = detectUiElements(
+        elements.resultCanvas,
+        latestOriginalCanvas,
+        backgroundColor,
+        Number(elements.strength.value),
+      );
       elements.downloadButton.disabled = !latestBlob;
       elements.downloadZipButton.disabled = !latestBlob || detectedElements.length === 0;
       elements.downloadZipButton.textContent = detectedElements.length > 0
