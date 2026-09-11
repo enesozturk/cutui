@@ -311,21 +311,24 @@
   function buildMask(imageData, strength, removeShadows, backgroundOverride = null) {
     const { width, height, data } = imageData;
     const backgroundColor = backgroundOverride || estimateDominantBorder(imageData);
-    // Shadows are background-connected, so a modest extra margin removes the
-    // soft outer falloff without letting the flood fill cross strong component
-    // edges into pale UI surfaces.
-    const floodThreshold = removeShadows ? Math.min(120, strength + 16) : strength;
+    // Shadows are background-connected. In strict removal mode, use a wider
+    // margin and hard alpha so the darker inner halo is removed as well.
+    const floodThreshold = removeShadows ? Math.min(120, strength + 36) : strength;
     const status = new Uint8Array(width * height);
     const queue = new Int32Array(width * height);
     let queueStart = 0;
     let queueEnd = 0;
 
-    const visit = (pixelIndex) => {
+    const visit = (pixelIndex, previousDistance = null) => {
       if (status[pixelIndex] !== 0) return;
-      const x = pixelIndex % width;
-      const y = Math.floor(pixelIndex / width);
       const dataIndex = pixelIndex * 4;
-      if (colorDistance(data, dataIndex, backgroundColor) <= floodThreshold) {
+      const distance = data[dataIndex + 3] <= 3
+        ? 0
+        : colorDistance(data, dataIndex, backgroundColor);
+      const followsShadowGradient = !removeShadows
+        || previousDistance === null
+        || distance >= previousDistance - 6;
+      if (distance <= floodThreshold && followsShadowGradient) {
         status[pixelIndex] = 2;
         queue[queueEnd] = pixelIndex;
         queueEnd += 1;
@@ -348,10 +351,14 @@
       queueStart += 1;
       const x = pixelIndex % width;
       const y = Math.floor(pixelIndex / width);
-      if (x > 0) visit(pixelIndex - 1);
-      if (x < width - 1) visit(pixelIndex + 1);
-      if (y > 0) visit(pixelIndex - width);
-      if (y < height - 1) visit(pixelIndex + width);
+      const dataIndex = pixelIndex * 4;
+      const distance = data[dataIndex + 3] <= 3
+        ? 0
+        : colorDistance(data, dataIndex, backgroundColor);
+      if (x > 0) visit(pixelIndex - 1, distance);
+      if (x < width - 1) visit(pixelIndex + 1, distance);
+      if (y > 0) visit(pixelIndex - width, distance);
+      if (y < height - 1) visit(pixelIndex + width, distance);
     }
 
     // Only pixels reached from the crop's outer border may become transparent.
@@ -962,7 +969,6 @@
           element.width,
           element.height,
         );
-        restoreClosedContainerInterior(canvas, latestOriginalCanvas, element);
         const number = String(index + 1).padStart(2, "0");
         files.push({ name: `${sourceName}-element-${number}.png`, bytes: await canvasToPngBytes(canvas) });
       }
