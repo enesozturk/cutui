@@ -6,7 +6,7 @@
     <meta name="description" content="Extract pixel-faithful UI assets from screenshots in your browser." />
     <title>CutUI — UI asset extractor</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="stylesheet" href="./styles.css?v=12" />
+    <link rel="stylesheet" href="./styles.css?v=13" />
   </head>
   <body>
     <header class="site-header">
@@ -22,21 +22,50 @@
 
     <main>
       <section id="upload-view" class="upload-view" aria-labelledby="page-title">
-        <div class="intro">
-          <h1 id="page-title">Extract UI assets</h1>
-          <p>Turn a screenshot into a transparent PNG or a ZIP of separated elements.</p>
-        </div>
-        <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload a screenshot">
-          <div class="upload-glyph" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
-            </svg>
+        <div class="landing-grid">
+          <div class="intro">
+            <span class="eyebrow">UI asset extraction</span>
+            <h1 id="page-title">Turn screenshots into usable UI assets.</h1>
+            <p>Keep every pixel, remove the page background, and export the full composition or every detected element.</p>
+
+            <div class="example-flow" aria-label="Example screenshot before and after extraction">
+              <div class="example-frame">
+                <span class="example-label">Input</span>
+                <div class="example-canvas example-input" aria-hidden="true">
+                  <span class="demo-line demo-line-top"></span>
+                  <div class="demo-component">
+                    <span class="demo-avatar"></span>
+                    <span class="demo-copy"><i></i><i></i></span>
+                    <span class="demo-action"></span>
+                  </div>
+                  <span class="demo-line demo-line-bottom"></span>
+                </div>
+              </div>
+              <svg class="example-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>
+              <div class="example-frame">
+                <span class="example-label">Output</span>
+                <div class="example-canvas example-output" aria-hidden="true">
+                  <div class="demo-component">
+                    <span class="demo-avatar"></span>
+                    <span class="demo-copy"><i></i><i></i></span>
+                    <span class="demo-action"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <h2>Drop your screenshot here</h2>
-          <p>or browse from your computer</p>
-          <button id="choose-button" class="button button-primary" type="button">Choose screenshot</button>
-          <span class="upload-meta">PNG, JPG or WebP · 10 MB max</span>
-          <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload a screenshot">
+            <div class="upload-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
+              </svg>
+            </div>
+            <h2>Drop your screenshot here</h2>
+            <p>or browse from your computer</p>
+            <button id="choose-button" class="button button-primary" type="button">Choose screenshot</button>
+            <span class="upload-meta">PNG, JPG or WebP · 10 MB max</span>
+            <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+          </div>
         </div>
       </section>
 
@@ -44,7 +73,7 @@
         <div class="editor-heading">
           <div>
             <h1 id="editor-title">Review extraction</h1>
-            <p>Drag on the original to extract a smaller region.</p>
+            <p>Your full screenshot is processed at its original resolution.</p>
           </div>
           <button id="new-image-button" class="button button-secondary" type="button">New image</button>
         </div>
@@ -53,11 +82,9 @@
           <section class="panel" aria-labelledby="source-title">
             <div class="panel-header">
               <h2 id="source-title">Original</h2>
-              <button id="reset-selection-button" class="text-button" type="button">Select all</button>
             </div>
             <div class="canvas-stage source-stage">
-              <canvas id="source-canvas" tabindex="0" aria-label="Screenshot selection canvas. Drag to select an asset." aria-describedby="selection-status"></canvas>
-              <p id="selection-status" class="sr-only" aria-live="polite"></p>
+              <canvas id="source-canvas" aria-label="Original screenshot"></canvas>
             </div>
           </section>
 
@@ -66,7 +93,12 @@
               <h2 id="result-title">Result</h2>
               <span id="result-size" class="result-size">Processing…</span>
             </div>
-            <div class="canvas-stage result-stage">
+            <div id="result-stage" class="canvas-stage result-stage">
+              <div class="preview-backgrounds" role="group" aria-label="Result preview background">
+                <button class="preview-swatch preview-transparent is-active" type="button" data-preview-background="transparent" aria-label="Transparent background" aria-pressed="true" title="Transparent"></button>
+                <button class="preview-swatch preview-white" type="button" data-preview-background="white" aria-label="White background" aria-pressed="false" title="White"></button>
+                <button class="preview-swatch preview-black" type="button" data-preview-background="black" aria-label="Black background" aria-pressed="false" title="Black"></button>
+              </div>
               <canvas id="result-canvas" aria-label="Extracted transparent UI asset"></canvas>
               <div id="empty-result" class="empty-result"><span class="loader" aria-hidden="true"></span><p>Extracting pixels…</p></div>
             </div>
@@ -74,14 +106,20 @@
 
           <div class="actions" aria-label="Export actions">
             <p>Export at the original resolution</p>
-            <button id="download-button" class="button button-primary" type="button" disabled>Download PNG</button>
-            <button id="download-zip-button" class="button button-dark" type="button" disabled>Download ZIP</button>
+            <button id="download-button" class="button button-primary button-with-icon" type="button" disabled>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.75v9.5m0 0 3.5-3.5m-3.5 3.5-3.5-3.5M3.5 12v3.25a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V12" /></svg>
+              <span>Download</span>
+            </button>
+            <button id="download-zip-button" class="button button-secondary button-with-icon" type="button" disabled>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.25 5.25V4.5a1.75 1.75 0 0 1 1.75-1.75h6.5a1.75 1.75 0 0 1 1.75 1.75V11A1.75 1.75 0 0 1 14.5 12.75h-.75M5.5 7.25h6.5A1.75 1.75 0 0 1 13.75 9v6.5A1.75 1.75 0 0 1 12 17.25H5.5a1.75 1.75 0 0 1-1.75-1.75V9A1.75 1.75 0 0 1 5.5 7.25Z" /></svg>
+              <span id="download-zip-label">Download All</span>
+            </button>
           </div>
         </div>
       </section>
 
       <div id="status" class="toast" role="status" aria-live="polite" hidden></div>
     </main>
-    <script src="./app.js?v=12" defer></script>
+    <script src="./app.js?v=13" defer></script>
   </body>
 </html>

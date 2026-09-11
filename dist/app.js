@@ -16,14 +16,15 @@
     fileInput: document.querySelector("#file-input"),
     chooseButton: document.querySelector("#choose-button"),
     newImageButton: document.querySelector("#new-image-button"),
-    resetSelectionButton: document.querySelector("#reset-selection-button"),
     sourceCanvas: document.querySelector("#source-canvas"),
-    selectionStatus: document.querySelector("#selection-status"),
     resultCanvas: document.querySelector("#result-canvas"),
+    resultStage: document.querySelector("#result-stage"),
+    previewBackgroundButtons: [...document.querySelectorAll("[data-preview-background]")],
     emptyResult: document.querySelector("#empty-result"),
     resultSize: document.querySelector("#result-size"),
     downloadButton: document.querySelector("#download-button"),
     downloadZipButton: document.querySelector("#download-zip-button"),
+    downloadZipLabel: document.querySelector("#download-zip-label"),
     status: document.querySelector("#status"),
   };
 
@@ -33,7 +34,6 @@
   let sourceImage = null;
   let sourceName = "ui-asset";
   let selection = null;
-  let dragStart = null;
   let latestBlob = null;
   let extracting = false;
   let toastTimer = null;
@@ -61,6 +61,16 @@
     }, duration);
   }
 
+  function setPreviewBackground(background) {
+    elements.resultStage.classList.toggle("preview-white", background === "white");
+    elements.resultStage.classList.toggle("preview-black", background === "black");
+    elements.previewBackgroundButtons.forEach((button) => {
+      const isActive = button.dataset.previewBackground === background;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    });
+  }
+
   function openPicker() {
     elements.fileInput.click();
   }
@@ -81,7 +91,7 @@
     loadImage(url, () => URL.revokeObjectURL(url));
   }
 
-  function loadImage(url, onComplete, suggestedSelection = null) {
+  function loadImage(url, onComplete) {
     const currentLoad = ++loadVersion;
     const image = new Image();
     image.onload = () => {
@@ -98,7 +108,7 @@
       elements.sourceCanvas.width = image.naturalWidth;
       elements.sourceCanvas.height = image.naturalHeight;
 
-      selection = suggestedSelection || {
+      selection = {
         x: 0,
         y: 0,
         width: image.naturalWidth,
@@ -110,7 +120,6 @@
       clearResult();
       drawSource();
       elements.editorView.scrollIntoView({ behavior: "smooth", block: "start" });
-      elements.sourceCanvas.focus({ preventScroll: true });
       showStatus("Screenshot loaded. Extracting UI assets…");
       window.setTimeout(() => extractAsset(), 0);
       if (onComplete) onComplete();
@@ -156,7 +165,7 @@
         <text x="382" y="674" font-family="Arial, sans-serif" font-size="16" fill="#929996">No credit card required</text>
       </svg>`;
     const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sample)}`;
-    loadImage(url, null, { x: 265, y: 105, width: 870, height: 690 });
+    loadImage(url, null);
   }
 
   function drawSource() {
@@ -164,68 +173,6 @@
     const canvas = elements.sourceCanvas;
     sourceContext.clearRect(0, 0, canvas.width, canvas.height);
     sourceContext.drawImage(sourceImage, 0, 0);
-
-    if (!selection) return;
-    const { x, y, width, height } = selection;
-    sourceContext.save();
-    sourceContext.fillStyle = "rgba(13, 18, 16, 0.48)";
-    sourceContext.beginPath();
-    sourceContext.rect(0, 0, canvas.width, canvas.height);
-    sourceContext.rect(x, y, width, height);
-    sourceContext.fill("evenodd");
-
-    const scale = canvas.width / Math.max(canvas.getBoundingClientRect().width, 1);
-    sourceContext.strokeStyle = "rgba(255, 255, 255, 0.98)";
-    sourceContext.lineWidth = Math.max(3, 3 * scale);
-    sourceContext.strokeRect(x, y, width, height);
-    sourceContext.strokeStyle = "rgba(23, 23, 23, 0.9)";
-    sourceContext.lineWidth = Math.max(1, 1 * scale);
-    sourceContext.setLineDash([8 * scale, 5 * scale]);
-    sourceContext.strokeRect(x, y, width, height);
-    sourceContext.setLineDash([]);
-
-    const handleSize = 8 * scale;
-    sourceContext.fillStyle = "#ffffff";
-    sourceContext.strokeStyle = "#171717";
-    sourceContext.lineWidth = Math.max(1, scale);
-    [[x, y], [x + width, y], [x, y + height], [x + width, y + height]].forEach(([hx, hy]) => {
-      sourceContext.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
-      sourceContext.strokeRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
-    });
-    sourceContext.restore();
-    elements.selectionStatus.textContent = `Selection: ${Math.round(width)} by ${Math.round(height)} pixels, starting at ${Math.round(x)}, ${Math.round(y)}.`;
-  }
-
-  function pointFromEvent(event) {
-    const rect = elements.sourceCanvas.getBoundingClientRect();
-    return {
-      x: clamp((event.clientX - rect.left) * (elements.sourceCanvas.width / rect.width), 0, elements.sourceCanvas.width),
-      y: clamp((event.clientY - rect.top) * (elements.sourceCanvas.height / rect.height), 0, elements.sourceCanvas.height),
-    };
-  }
-
-  function normalizedSelection(start, end) {
-    const x = Math.min(start.x, end.x);
-    const y = Math.min(start.y, end.y);
-    return {
-      x: Math.round(x),
-      y: Math.round(y),
-      width: Math.round(Math.abs(end.x - start.x)),
-      height: Math.round(Math.abs(end.y - start.y)),
-    };
-  }
-
-  function resetSelection() {
-    if (!sourceImage) return;
-    selection = {
-      x: 0,
-      y: 0,
-      width: sourceImage.naturalWidth,
-      height: sourceImage.naturalHeight,
-    };
-    clearResult();
-    drawSource();
-    window.setTimeout(() => extractAsset(), 0);
   }
 
   function clearResult() {
@@ -237,7 +184,7 @@
     elements.resultSize.textContent = "Waiting for extraction";
     elements.downloadButton.disabled = true;
     elements.downloadZipButton.disabled = true;
-    elements.downloadZipButton.textContent = "Download ZIP";
+    elements.downloadZipLabel.textContent = "Download All";
     detectedElements = [];
     latestOriginalCanvas = null;
   }
@@ -967,9 +914,9 @@
 
   async function downloadElementsZip() {
     if (!latestBlob || detectedElements.length === 0) return;
-    const originalLabel = elements.downloadZipButton.textContent;
+    const originalLabel = elements.downloadZipLabel.textContent;
     elements.downloadZipButton.disabled = true;
-    elements.downloadZipButton.textContent = "Building ZIP…";
+    elements.downloadZipLabel.textContent = "Preparing…";
 
     try {
       const files = [];
@@ -1005,17 +952,17 @@
       showStatus(`${files.length} separated elements downloaded.`);
     } catch (error) {
       console.error(error);
-      showStatus("ZIP creation failed. Try a smaller selection.");
+      showStatus("ZIP creation failed. Try a smaller image.");
     } finally {
       elements.downloadZipButton.disabled = false;
-      elements.downloadZipButton.textContent = originalLabel;
+      elements.downloadZipLabel.textContent = originalLabel;
     }
   }
 
   async function extractAsset() {
     if (extracting) return null;
     if (!sourceImage || !selection || selection.width < MIN_SELECTION || selection.height < MIN_SELECTION) {
-      showStatus("Drag a larger selection around the component first.");
+      showStatus("Choose a larger screenshot first.");
       return null;
     }
 
@@ -1028,7 +975,7 @@
       const width = clamp(Math.round(selection.width), 1, elements.sourceCanvas.width - x);
       const height = clamp(Math.round(selection.height), 1, elements.sourceCanvas.height - y);
       if (width * height > MAX_SELECTION_PIXELS) {
-        showStatus("That selection is too large for a fast extraction. Select an area under 8 megapixels.", 4200);
+        showStatus("That screenshot is too large for a fast extraction. Use an image under 8 megapixels.", 4200);
         return null;
       }
 
@@ -1053,7 +1000,7 @@
 
       if (!framed) {
         clearResult();
-        showStatus("No UI elements were found in this selection.");
+        showStatus("No UI elements were found in this screenshot.");
         return null;
       }
 
@@ -1101,14 +1048,14 @@
       latestBlob = await new Promise((resolve) => elements.resultCanvas.toBlob(resolve, "image/png"));
       elements.downloadButton.disabled = !latestBlob;
       elements.downloadZipButton.disabled = !latestBlob || detectedElements.length === 0;
-      elements.downloadZipButton.textContent = detectedElements.length > 0
-        ? `Download ZIP (${detectedElements.length} elements)`
-        : "Download ZIP";
+      elements.downloadZipLabel.textContent = detectedElements.length > 0
+        ? `Download All (${detectedElements.length} elements)`
+        : "Download All";
       showStatus(`${detectedElements.length} UI ${detectedElements.length === 1 ? "element" : "elements"} ready.`);
       return { width: output.width, height: output.height };
     } catch (error) {
       console.error(error);
-      showStatus("Extraction failed. Try a smaller selection.");
+      showStatus("Extraction failed. Try a smaller screenshot.");
       return null;
     } finally {
       extracting = false;
@@ -1133,6 +1080,7 @@
     elements.editorView.hidden = true;
     elements.uploadView.hidden = false;
     clearResult();
+    setPreviewBackground("transparent");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1171,58 +1119,15 @@
     if (imageItem) validateAndLoadFile(imageItem.getAsFile());
   });
 
-  elements.sourceCanvas.addEventListener("pointerdown", (event) => {
-    if (!sourceImage) return;
-    dragStart = pointFromEvent(event);
-    selection = { x: dragStart.x, y: dragStart.y, width: 0, height: 0 };
-    elements.sourceCanvas.setPointerCapture(event.pointerId);
-    clearResult();
-    drawSource();
-  });
-  elements.sourceCanvas.addEventListener("pointermove", (event) => {
-    if (!dragStart || !elements.sourceCanvas.hasPointerCapture(event.pointerId)) return;
-    selection = normalizedSelection(dragStart, pointFromEvent(event));
-    drawSource();
-  });
-  elements.sourceCanvas.addEventListener("pointerup", (event) => {
-    if (!dragStart) return;
-    selection = normalizedSelection(dragStart, pointFromEvent(event));
-    dragStart = null;
-    if (selection.width < MIN_SELECTION || selection.height < MIN_SELECTION) {
-      showStatus("Drag a larger box around the UI you want.");
-    } else {
-      window.setTimeout(() => extractAsset(), 0);
-    }
-    drawSource();
-  });
-  const cancelSelectionDrag = () => {
-    dragStart = null;
-    drawSource();
-  };
-  elements.sourceCanvas.addEventListener("pointercancel", cancelSelectionDrag);
-  elements.sourceCanvas.addEventListener("lostpointercapture", cancelSelectionDrag);
-
-  elements.sourceCanvas.addEventListener("keydown", (event) => {
-    if (!selection || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
-    event.preventDefault();
-    const step = event.altKey ? 10 : 1;
-    const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
-    const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
-    if (event.shiftKey) {
-      selection.width = clamp(selection.width + dx, MIN_SELECTION, elements.sourceCanvas.width - selection.x);
-      selection.height = clamp(selection.height + dy, MIN_SELECTION, elements.sourceCanvas.height - selection.y);
-    } else {
-      selection.x = clamp(selection.x + dx, 0, elements.sourceCanvas.width - selection.width);
-      selection.y = clamp(selection.y + dy, 0, elements.sourceCanvas.height - selection.height);
-    }
-    clearResult();
-    drawSource();
-  });
-
   elements.newImageButton.addEventListener("click", startOver);
-  elements.resetSelectionButton.addEventListener("click", resetSelection);
   elements.downloadButton.addEventListener("click", downloadAsset);
   elements.downloadZipButton.addEventListener("click", downloadElementsZip);
+
+  elements.previewBackgroundButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setPreviewBackground(button.dataset.previewBackground);
+    });
+  });
 
   function registerWebMcpTools() {
     const context = document.modelContext;
@@ -1233,7 +1138,7 @@
       void Promise.resolve(context.registerTool({
         name: "load_sample_screenshot",
         title: "Load sample screenshot",
-        description: "Open CutUI's built-in UI screenshot and prepare its sample card selection.",
+        description: "Open CutUI's built-in UI screenshot and process the full image.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, untrustedContentHint: false },
         async execute() {
@@ -1243,14 +1148,14 @@
       }, { signal: lifecycle.signal })).catch(() => {});
 
       void Promise.resolve(context.registerTool({
-        name: "extract_selected_ui_asset",
-        title: "Extract selected UI asset",
-        description: "Automatically extract transparent UI assets from the visible screenshot selection.",
+        name: "extract_ui_assets",
+        title: "Extract UI assets",
+        description: "Automatically extract transparent UI assets from the full screenshot.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         annotations: { readOnlyHint: false, untrustedContentHint: false },
         async execute() {
           const result = await extractAsset();
-          if (!result) throw new Error("No asset could be extracted from the current selection.");
+          if (!result) throw new Error("No asset could be extracted from the current screenshot.");
           return { status: "extracted", ...result };
         },
       }, { signal: lifecycle.signal })).catch(() => {});
