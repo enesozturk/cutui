@@ -20,6 +20,11 @@ Then open <http://localhost:4173>.
 
 Everything runs with Canvas APIs in the browser. There is no backend, model inference, upload, or API cost.
 
+## Downloads
+
+- **Single PNG:** the complete selected composition as one transparent image.
+- **ZIP:** detected connected UI surfaces and grouped text/icon lines as separate transparent PNG files.
+
 ## POC limits
 
 - Best on flat or softly graded backgrounds.

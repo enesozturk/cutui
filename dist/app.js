@@ -31,6 +31,7 @@
     paddingValue: document.querySelector("#padding-value"),
     extractButton: document.querySelector("#extract-button"),
     downloadButton: document.querySelector("#download-button"),
+    downloadZipButton: document.querySelector("#download-zip-button"),
     copyButton: document.querySelector("#copy-button"),
     status: document.querySelector("#status"),
   };
@@ -47,8 +48,18 @@
   let loadVersion = 0;
   let manualBackground = null;
   let pickingBackground = false;
+  let detectedElements = [];
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+  function safeBaseName(name) {
+    return name
+      .replace(/\.[^.]+$/, "")
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "ui-asset";
+  }
 
   function showStatus(message, duration = 2800) {
     window.clearTimeout(toastTimer);
@@ -75,7 +86,7 @@
     }
 
     const url = URL.createObjectURL(file);
-    sourceName = file.name.replace(/\.[^.]+$/, "") || "ui-asset";
+    sourceName = safeBaseName(file.name);
     loadImage(url, () => URL.revokeObjectURL(url));
   }
 
@@ -233,7 +244,10 @@
     elements.emptyResult.hidden = false;
     elements.resultSize.textContent = "Waiting for extraction";
     elements.downloadButton.disabled = true;
+    elements.downloadZipButton.disabled = true;
+    elements.downloadZipButton.textContent = "Download ZIP";
     elements.copyButton.disabled = true;
+    detectedElements = [];
   }
 
   function estimateDominantBorder(imageData) {
@@ -412,6 +426,300 @@
     return output;
   }
 
+  function detectUiElements(canvas) {
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    const { width, height } = canvas;
+    const pixels = context.getImageData(0, 0, width, height).data;
+    const visited = new Uint8Array(width * height);
+    const queue = new Int32Array(width * height);
+    const components = [];
+    const alphaThreshold = 10;
+
+    for (let start = 0; start < visited.length; start += 1) {
+      if (visited[start] || pixels[start * 4 + 3] <= alphaThreshold) continue;
+
+      let queueStart = 0;
+      let queueEnd = 0;
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+      let pixelCount = 0;
+      visited[start] = 1;
+      queue[queueEnd++] = start;
+
+      while (queueStart < queueEnd) {
+        const pixelIndex = queue[queueStart++];
+        const x = pixelIndex % width;
+        const y = Math.floor(pixelIndex / width);
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+        pixelCount += 1;
+
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            if (dx === 0 && dy === 0) continue;
+            const nextX = x + dx;
+            const nextY = y + dy;
+            if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) continue;
+            const next = nextY * width + nextX;
+            if (visited[next] || pixels[next * 4 + 3] <= alphaThreshold) continue;
+            visited[next] = 1;
+            queue[queueEnd++] = next;
+          }
+        }
+      }
+
+      if (pixelCount < 3) continue;
+      components.push({
+        x: minX,
+        y: minY,
+        width: maxX - minX + 1,
+        height: maxY - minY + 1,
+        pixelCount,
+      });
+    }
+
+    const totalArea = width * height;
+    const large = [];
+    const small = [];
+    components.forEach((component) => {
+      const boxArea = component.width * component.height;
+      const isSurface = boxArea > totalArea * 0.0015
+        || (component.width > width * 0.12 && component.height > height * 0.055);
+      (isSurface ? large : small).push(component);
+    });
+
+    // Merge glyphs and small icons that sit on the same visual line. Large
+    // connected surfaces remain separate, so adjacent cards never collapse
+    // into one ZIP entry.
+    const parents = small.map((_, index) => index);
+    const find = (index) => {
+      let current = index;
+      while (parents[current] !== current) {
+        parents[current] = parents[parents[current]];
+        current = parents[current];
+      }
+      return current;
+    };
+    const unite = (a, b) => {
+      const rootA = find(a);
+      const rootB = find(b);
+      if (rootA !== rootB) parents[rootB] = rootA;
+    };
+
+    for (let a = 0; a < small.length; a += 1) {
+      const first = small[a];
+      const firstRight = first.x + first.width;
+      const firstBottom = first.y + first.height;
+      for (let b = a + 1; b < small.length; b += 1) {
+        const second = small[b];
+        const secondRight = second.x + second.width;
+        const secondBottom = second.y + second.height;
+        const overlapY = Math.max(0, Math.min(firstBottom, secondBottom) - Math.max(first.y, second.y));
+        const overlapRatio = overlapY / Math.max(1, Math.min(first.height, second.height));
+        const centerDifference = Math.abs(
+          (first.y + first.height / 2) - (second.y + second.height / 2),
+        );
+        const sameLine = overlapRatio >= 0.42
+          || centerDifference <= Math.max(first.height, second.height) * 0.34;
+        if (!sameLine) continue;
+
+        const horizontalGap = Math.max(0, Math.max(first.x, second.x) - Math.min(firstRight, secondRight));
+        const allowedGap = Math.max(12, Math.min(42, Math.max(first.height, second.height) * 0.95));
+        if (horizontalGap <= allowedGap) unite(a, b);
+      }
+    }
+
+    const textGroups = new Map();
+    small.forEach((component, index) => {
+      const root = find(index);
+      const existing = textGroups.get(root);
+      if (!existing) {
+        textGroups.set(root, { ...component });
+        return;
+      }
+      const right = Math.max(existing.x + existing.width, component.x + component.width);
+      const bottom = Math.max(existing.y + existing.height, component.y + component.height);
+      existing.x = Math.min(existing.x, component.x);
+      existing.y = Math.min(existing.y, component.y);
+      existing.width = right - existing.x;
+      existing.height = bottom - existing.y;
+      existing.pixelCount += component.pixelCount;
+    });
+
+    const result = [...large, ...textGroups.values()]
+      .filter((component) => component.width >= 2 && component.height >= 2)
+      .map((component) => {
+        const padding = clamp(Math.round(Math.min(component.width, component.height) * 0.08), 4, 12);
+        const x = Math.max(0, component.x - padding);
+        const y = Math.max(0, component.y - padding);
+        const right = Math.min(width, component.x + component.width + padding);
+        const bottom = Math.min(height, component.y + component.height + padding);
+        return { x, y, width: right - x, height: bottom - y };
+      });
+
+    result.sort((a, b) => {
+      const rowTolerance = Math.max(12, Math.min(a.height, b.height) * 0.35);
+      if (Math.abs(a.y - b.y) > rowTolerance) return a.y - b.y;
+      return a.x - b.x;
+    });
+    return result.slice(0, 100);
+  }
+
+  function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (let index = 0; index < bytes.length; index += 1) {
+      crc ^= bytes[index];
+      for (let bit = 0; bit < 8; bit += 1) {
+        crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+      }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function writeUint16(view, offset, value) {
+    view.setUint16(offset, value, true);
+  }
+
+  function writeUint32(view, offset, value) {
+    view.setUint32(offset, value >>> 0, true);
+  }
+
+  function zipTimestamp(date = new Date()) {
+    const year = Math.max(1980, date.getFullYear());
+    return {
+      time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+      date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+    };
+  }
+
+  function buildStoredZip(files) {
+    const encoder = new TextEncoder();
+    const localChunks = [];
+    const centralChunks = [];
+    const stamp = zipTimestamp();
+    let localOffset = 0;
+
+    files.forEach((file) => {
+      const name = encoder.encode(file.name);
+      const bytes = file.bytes;
+      const checksum = crc32(bytes);
+      const local = new Uint8Array(30 + name.length);
+      const localView = new DataView(local.buffer);
+      writeUint32(localView, 0, 0x04034b50);
+      writeUint16(localView, 4, 20);
+      writeUint16(localView, 6, 0x0800);
+      writeUint16(localView, 8, 0);
+      writeUint16(localView, 10, stamp.time);
+      writeUint16(localView, 12, stamp.date);
+      writeUint32(localView, 14, checksum);
+      writeUint32(localView, 18, bytes.length);
+      writeUint32(localView, 22, bytes.length);
+      writeUint16(localView, 26, name.length);
+      writeUint16(localView, 28, 0);
+      local.set(name, 30);
+      localChunks.push(local, bytes);
+
+      const central = new Uint8Array(46 + name.length);
+      const centralView = new DataView(central.buffer);
+      writeUint32(centralView, 0, 0x02014b50);
+      writeUint16(centralView, 4, 20);
+      writeUint16(centralView, 6, 20);
+      writeUint16(centralView, 8, 0x0800);
+      writeUint16(centralView, 10, 0);
+      writeUint16(centralView, 12, stamp.time);
+      writeUint16(centralView, 14, stamp.date);
+      writeUint32(centralView, 16, checksum);
+      writeUint32(centralView, 20, bytes.length);
+      writeUint32(centralView, 24, bytes.length);
+      writeUint16(centralView, 28, name.length);
+      writeUint16(centralView, 30, 0);
+      writeUint16(centralView, 32, 0);
+      writeUint16(centralView, 34, 0);
+      writeUint16(centralView, 36, 0);
+      writeUint32(centralView, 38, 0);
+      writeUint32(centralView, 42, localOffset);
+      central.set(name, 46);
+      centralChunks.push(central);
+      localOffset += local.length + bytes.length;
+    });
+
+    const centralSize = centralChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const end = new Uint8Array(22);
+    const endView = new DataView(end.buffer);
+    writeUint32(endView, 0, 0x06054b50);
+    writeUint16(endView, 4, 0);
+    writeUint16(endView, 6, 0);
+    writeUint16(endView, 8, files.length);
+    writeUint16(endView, 10, files.length);
+    writeUint32(endView, 12, centralSize);
+    writeUint32(endView, 16, localOffset);
+    writeUint16(endView, 20, 0);
+    return new Blob([...localChunks, ...centralChunks, end], { type: "application/zip" });
+  }
+
+  function canvasToPngBytes(canvas) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          reject(new Error("PNG encoding failed"));
+          return;
+        }
+        resolve(new Uint8Array(await blob.arrayBuffer()));
+      }, "image/png");
+    });
+  }
+
+  async function downloadElementsZip() {
+    if (!latestBlob || detectedElements.length === 0) return;
+    const originalLabel = elements.downloadZipButton.textContent;
+    elements.downloadZipButton.disabled = true;
+    elements.downloadZipButton.textContent = "Building ZIP…";
+
+    try {
+      const files = [];
+      for (let index = 0; index < detectedElements.length; index += 1) {
+        const element = detectedElements[index];
+        const canvas = document.createElement("canvas");
+        canvas.width = element.width;
+        canvas.height = element.height;
+        const context = canvas.getContext("2d");
+        context.imageSmoothingEnabled = false;
+        context.drawImage(
+          elements.resultCanvas,
+          element.x,
+          element.y,
+          element.width,
+          element.height,
+          0,
+          0,
+          element.width,
+          element.height,
+        );
+        const number = String(index + 1).padStart(2, "0");
+        files.push({ name: `${sourceName}-element-${number}.png`, bytes: await canvasToPngBytes(canvas) });
+      }
+
+      const zip = buildStoredZip(files);
+      const url = URL.createObjectURL(zip);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${sourceName}-cutui-elements.zip`;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showStatus(`${files.length} separated elements downloaded.`);
+    } catch (error) {
+      console.error(error);
+      showStatus("ZIP creation failed. Try a smaller selection.");
+    } finally {
+      elements.downloadZipButton.disabled = false;
+      elements.downloadZipButton.textContent = originalLabel;
+    }
+  }
+
   async function extractAsset() {
     if (!sourceImage || !selection || selection.width < MIN_SELECTION || selection.height < MIN_SELECTION) {
       showStatus("Drag a larger selection around the component first.");
@@ -463,7 +771,12 @@
       elements.resultSize.textContent = `${output.width} × ${output.height} px`;
 
       latestBlob = await new Promise((resolve) => elements.resultCanvas.toBlob(resolve, "image/png"));
+      detectedElements = detectUiElements(elements.resultCanvas);
       elements.downloadButton.disabled = !latestBlob;
+      elements.downloadZipButton.disabled = !latestBlob || detectedElements.length === 0;
+      elements.downloadZipButton.textContent = detectedElements.length > 0
+        ? `Download ZIP (${detectedElements.length} elements)`
+        : "Download ZIP";
       elements.copyButton.disabled = !latestBlob;
       showStatus("Asset extracted successfully.");
       return { width: output.width, height: output.height };
@@ -647,6 +960,7 @@
   elements.resetSelectionButton.addEventListener("click", resetSelection);
   elements.extractButton.addEventListener("click", extractAsset);
   elements.downloadButton.addEventListener("click", downloadAsset);
+  elements.downloadZipButton.addEventListener("click", downloadElementsZip);
   elements.copyButton.addEventListener("click", copyAsset);
 
   function registerWebMcpTools() {
