@@ -16,7 +16,7 @@ Then open <http://localhost:4173>.
 2. Drag a rectangle around one component, leaving a little surrounding background.
 3. CutUI finds the dominant background color along the selection border, or lets you pick it manually.
 4. A border-connected flood fill removes only matching outside pixels.
-5. Connected drop shadows are hard-cut by default; interior text, icons, and fills keep their original RGB values byte-for-byte.
+5. Connected drop shadows are hard-cut by default while crisp 1–2 px UI borders are treated as protected edges; interior text, icons, and fills keep their original RGB values byte-for-byte.
 
 Everything runs with Canvas APIs in the browser. There is no backend, model inference, upload, or API cost.
 

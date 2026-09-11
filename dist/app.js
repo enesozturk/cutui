@@ -318,6 +318,22 @@
     const queue = new Int32Array(width * height);
     let queueStart = 0;
     let queueEnd = 0;
+    const edgeJump = Math.max(8, strength * 0.33);
+    const hasEdgeJump = (neighbor, distance) => {
+      const neighborIndex = neighbor * 4;
+      const neighborDistance = colorDistance(data, neighborIndex, backgroundColor);
+      return distance - neighborDistance >= edgeJump;
+    };
+
+    const isCrispUiEdge = (pixelIndex, distance) => {
+      if (!removeShadows || distance <= strength) return false;
+      const x = pixelIndex % width;
+      const y = Math.floor(pixelIndex / width);
+      return (x > 0 && hasEdgeJump(pixelIndex - 1, distance))
+        || (x < width - 1 && hasEdgeJump(pixelIndex + 1, distance))
+        || (y > 0 && hasEdgeJump(pixelIndex - width, distance))
+        || (y < height - 1 && hasEdgeJump(pixelIndex + width, distance));
+    };
 
     const visit = (pixelIndex, previousDistance = null) => {
       if (status[pixelIndex] !== 0) return;
@@ -325,6 +341,10 @@
       const distance = data[dataIndex + 3] <= 3
         ? 0
         : colorDistance(data, dataIndex, backgroundColor);
+      if (isCrispUiEdge(pixelIndex, distance)) {
+        status[pixelIndex] = 1;
+        return;
+      }
       const followsShadowGradient = !removeShadows
         || previousDistance === null
         || distance >= previousDistance - 6;
