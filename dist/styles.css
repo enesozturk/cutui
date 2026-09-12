@@ -133,7 +133,7 @@ main { width: min(1216px, calc(100% - 48px)); margin: 0 auto; flex: 1; }
 
 .landing-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
   align-items: stretch;
   gap: clamp(34px, 4vw, 52px);
 }
@@ -157,7 +157,8 @@ main { width: min(1216px, calc(100% - 48px)); margin: 0 auto; flex: 1; }
   font-weight: 600;
   letter-spacing: 0;
 }
-.intro h1 { max-width: 420px; margin-bottom: 18px; font-family: var(--font-heading); font-size: clamp(2.35rem, 3.35vw, 3.35rem); line-height: 1.07; letter-spacing: -.045em; font-weight: 700; text-wrap: balance; }
+.intro h1 { max-width: 520px; margin-bottom: 18px; font-family: var(--font-heading); font-size: 2.5rem; line-height: 1.12; letter-spacing: -.04em; font-weight: 700; }
+.intro h1 span { display: block; white-space: nowrap; }
 .intro > p { max-width: 390px; margin-bottom: 0; color: var(--muted); font-size: 1rem; line-height: 1.65; }
 
 .hero-demo { width: min(100%, 370px); margin-top: 28px; }
@@ -535,6 +536,7 @@ canvas { display: block; max-width: 100%; max-height: 68vh; object-fit: contain;
   .landing-grid { grid-template-columns: 1fr; gap: 34px; }
   .intro { max-width: 680px; }
   .intro h1 { max-width: 610px; font-size: clamp(2.5rem, 9vw, 3.7rem); }
+  .intro h1 span { white-space: normal; }
   .hero-demo { width: min(100%, 420px); }
   .drop-zone { width: min(620px, 100%); height: auto; min-height: 330px; padding: 40px 20px; justify-self: center; }
   .editor-view { padding-top: 28px; }
