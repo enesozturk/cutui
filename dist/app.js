@@ -12,6 +12,10 @@
   const elements = {
     uploadView: document.querySelector("#upload-view"),
     editorView: document.querySelector("#editor-view"),
+    demoCompare: document.querySelector("#demo-compare"),
+    demoSlider: document.querySelector("#demo-slider"),
+    demoInputCanvas: document.querySelector("#demo-input-canvas"),
+    demoOutputCanvas: document.querySelector("#demo-output-canvas"),
     dropZone: document.querySelector("#drop-zone"),
     fileInput: document.querySelector("#file-input"),
     chooseButton: document.querySelector("#choose-button"),
@@ -348,6 +352,54 @@
     }
 
     return imageData;
+  }
+
+  function initDemoCompare() {
+    if (!elements.demoCompare || !elements.demoSlider || !elements.demoInputCanvas || !elements.demoOutputCanvas) return;
+
+    const updatePosition = () => {
+      elements.demoCompare.style.setProperty("--compare-position", `${elements.demoSlider.value}%`);
+    };
+    elements.demoSlider.addEventListener("input", updatePosition);
+    updatePosition();
+
+    const image = new Image();
+    image.onload = () => {
+      const width = Math.min(720, image.naturalWidth);
+      const height = Math.max(1, Math.round(image.naturalHeight * (width / image.naturalWidth)));
+      const inputContext = elements.demoInputCanvas.getContext("2d", { willReadFrequently: true });
+      const outputContext = elements.demoOutputCanvas.getContext("2d", { willReadFrequently: true });
+      [elements.demoInputCanvas, elements.demoOutputCanvas].forEach((canvas) => {
+        canvas.width = width;
+        canvas.height = height;
+      });
+      inputContext.imageSmoothingEnabled = true;
+      inputContext.imageSmoothingQuality = "high";
+      inputContext.drawImage(image, 0, 0, width, height);
+
+      const originalPixels = inputContext.getImageData(0, 0, width, height);
+      const backgroundColor = estimateDominantBorder(originalPixels);
+      const maskedPixels = buildMask(
+        new ImageData(new Uint8ClampedArray(originalPixels.data), width, height),
+        AUTO_REMOVAL_STRENGTH,
+        AUTO_REMOVE_SHADOWS,
+        backgroundColor,
+      );
+      outputContext.putImageData(maskedPixels, 0, 0);
+      const demoElements = detectUiElements(
+        elements.demoOutputCanvas,
+        elements.demoInputCanvas,
+        backgroundColor,
+        AUTO_REMOVAL_STRENGTH,
+      );
+      restoreDetectedContainersInComposite(
+        elements.demoOutputCanvas,
+        elements.demoInputCanvas,
+        demoElements,
+      );
+      elements.demoCompare.classList.add("is-ready");
+    };
+    image.src = "./demo-ui-input.png?v=1";
   }
 
   function frameAndPad(imageData, padding) {
@@ -1164,5 +1216,6 @@
     }
   }
 
+  initDemoCompare();
   registerWebMcpTools();
 })();

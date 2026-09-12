@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Merriweather:wght@700&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=16" />
+    <link rel="stylesheet" href="./styles.css?v=17" />
   </head>
   <body>
     <header class="site-header">
@@ -27,30 +27,20 @@
             <h1 id="page-title">Turn screenshots into usable UI assets.</h1>
             <p>Keep every pixel, remove the page background, and export the full composition or every detected element.</p>
 
-            <div class="example-flow" aria-label="Example screenshot before and after extraction">
-              <div class="example-frame">
-                <span class="example-label">Input</span>
-                <div class="example-canvas example-input" aria-hidden="true">
-                  <span class="demo-line demo-line-top"></span>
-                  <div class="demo-component">
-                    <span class="demo-avatar"></span>
-                    <span class="demo-copy"><i></i><i></i></span>
-                    <span class="demo-action"></span>
-                  </div>
-                  <span class="demo-line demo-line-bottom"></span>
+            <div class="hero-demo">
+              <div id="demo-compare" class="demo-compare" style="--compare-position: 50%;">
+                <div class="demo-pane demo-input-pane" aria-hidden="true">
+                  <canvas id="demo-input-canvas"></canvas>
                 </div>
-              </div>
-              <svg class="example-arrow" viewBox="0 0 256 256" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z" /></svg>
-              <div class="example-frame">
-                <span class="example-label">Output</span>
-                <div class="example-canvas example-output" aria-hidden="true">
-                  <div class="demo-component">
-                    <span class="demo-avatar"></span>
-                    <span class="demo-copy"><i></i><i></i></span>
-                    <span class="demo-action"></span>
-                  </div>
+                <div class="demo-pane demo-output-pane" aria-hidden="true">
+                  <canvas id="demo-output-canvas"></canvas>
                 </div>
+                <span class="demo-label demo-label-input">Input</span>
+                <span class="demo-label demo-label-output">Output</span>
+                <span class="demo-divider" aria-hidden="true"><i>↔</i></span>
+                <input id="demo-slider" class="demo-slider" type="range" min="0" max="100" value="50" aria-label="Compare the original screenshot and extracted result" />
               </div>
+              <p class="demo-caption"><span>Drag to compare</span><span>Real CutUI output</span></p>
             </div>
           </div>
           <div id="drop-zone" class="drop-zone" role="button" tabindex="0" aria-label="Upload a screenshot">
@@ -135,6 +125,6 @@
         </a>
       </nav>
     </footer>
-    <script src="./app.js?v=14" defer></script>
+    <script src="./app.js?v=15" defer></script>
   </body>
 </html>
