@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/cutui-banner-final.png" alt="CutUI turns interface screenshots into transparent UI assets" width="100%" />
+  <img src="https://raw.githubusercontent.com/enesozturk/cutui/ee00cd10634de49b5799ff06d6760682eadcfd15/assets/cutui-banner-final.png?banner=2" alt="CutUI turns interface screenshots into transparent UI assets" width="100%" />
 </p>
 
 <h1 align="center">CutUI</h1>
