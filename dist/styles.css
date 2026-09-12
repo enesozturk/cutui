@@ -140,9 +140,12 @@ main { width: min(1216px, calc(100% - 48px)); margin: 0 auto; flex: 1; }
 
 .intro { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .eyebrow {
+  width: max-content;
+  max-width: 100%;
   min-height: 28px;
   margin-bottom: 18px;
   padding: 0 10px;
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--border-strong);
@@ -259,9 +262,12 @@ main { width: min(1216px, calc(100% - 48px)); margin: 0 auto; flex: 1; }
 
 .drop-zone {
   isolation: isolate;
-  min-height: 430px;
-  padding: 56px 30px;
+  width: 100%;
+  height: clamp(410px, 48vh, 480px);
+  min-height: 410px;
+  padding: 44px 30px;
   position: relative;
+  align-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -305,6 +311,57 @@ main { width: min(1216px, calc(100% - 48px)); margin: 0 auto; flex: 1; }
 .drop-zone h2 { margin-bottom: 7px; font-size: 1rem; line-height: 1.5; letter-spacing: -.015em; font-weight: 600; }
 .drop-zone > p { margin-bottom: 24px; color: var(--muted); font-size: .875rem; }
 .upload-meta { margin-top: 18px; color: var(--muted-foreground); font-size: .75rem; }
+
+.page-drop-overlay {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--foreground);
+  background: rgba(249, 250, 251, .92);
+  backdrop-filter: blur(9px);
+  pointer-events: none;
+}
+
+.page-drop-overlay[hidden] { display: none; }
+
+.page-drop-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  border: 2px dashed var(--border-strong);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(255, 255, 255, .96), rgba(242, 244, 247, .6) 55%, transparent 78%);
+}
+
+.page-drop-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.page-drop-icon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.page-drop-icon svg { width: 26px; fill: currentColor; }
+.page-drop-card strong { font-size: clamp(1.35rem, 2.4vw, 2rem); letter-spacing: -.035em; }
+.page-drop-card span { color: var(--muted); font-size: .875rem; }
+body.page-dragging { overflow: hidden; }
 
 .button {
   min-height: 40px;
@@ -479,8 +536,7 @@ canvas { display: block; max-width: 100%; max-height: 68vh; object-fit: contain;
   .intro { max-width: 680px; }
   .intro h1 { max-width: 610px; font-size: clamp(2.5rem, 9vw, 3.7rem); }
   .hero-demo { width: min(100%, 420px); }
-  .drop-zone { width: min(620px, 100%); justify-self: center; }
-  .drop-zone { min-height: 330px; padding: 40px 20px; }
+  .drop-zone { width: min(620px, 100%); height: auto; min-height: 330px; padding: 40px 20px; justify-self: center; }
   .editor-view { padding-top: 28px; }
   .editor-heading { align-items: center; }
   .workspace { grid-template-columns: 1fr; }
@@ -492,6 +548,8 @@ canvas { display: block; max-width: 100%; max-height: 68vh; object-fit: contain;
 }
 
 @media (max-width: 480px) {
+  .page-drop-overlay { padding: 10px; }
+  .page-drop-overlay::before { inset: 10px; border-radius: 14px; }
   .eyebrow { margin-bottom: 16px; }
   .intro h1 { font-size: 2.4rem; line-height: 1.12; }
   .intro > p { font-size: 1rem; }
