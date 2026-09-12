@@ -42,8 +42,8 @@ The result can be previewed on transparent, white, or black backgrounds before d
 No build step or dependency installation is required.
 
 ```bash
-git clone https://github.com/enesozturk/ui-asset-extractor-poc.git
-cd ui-asset-extractor-poc
+git clone https://github.com/enesozturk/cutui.git
+cd cutui
 python3 -m http.server 4173 --directory dist
 ```
 
